@@ -52,21 +52,29 @@ def render():
         for i, photo in enumerate(st.session_state.photos):
             with cols[i % 3]:
                 st.image(photo["image_bytes"], caption=photo["filename"], width=200)
+                # Metadata
+                st.caption(
+                    f"📁 {photo['project_id']}  |  "
+                    f"📍 {photo['location']}  |  "
+                    f"🕐 {photo['timestamp'][:10]}"
+                )
+                # Hazard status
                 if photo["hazard_flag"]:
                     st.error("⚠ Hazard detected")
                 elif photo["ai_description"] == "":
                     st.caption("Not analysed yet")
                 else:
                     st.success("✅ No hazard detected")
-        # AI description
-        if photo["ai_description"] and photo["ai_description"] != "":
-            st.caption(f"🤖 {photo['ai_description']}")
-        if photo["hazard_details"] and photo["hazard_details"] != "":
-            st.warning(f"⚠ {photo['hazard_details']}")
+                # AI description
+                if photo["ai_description"] and photo["ai_description"] != "":
+                    st.caption(f"🤖 {photo['ai_description']}")
+                if photo["hazard_details"] and photo["hazard_details"] != "":
+                    st.warning(f"⚠ {photo['hazard_details']}")
+
+        st.divider()
 
         # AI Analysis button
         if st.button("🤖 Analyse photos with AI", key="analyse_btn"):
-            st.write("DEBUG: button clicked, photos:", len(st.session_state.photos))
             with st.spinner("Analysing photos..."):
                 success, failed = 0, 0
                 for photo in st.session_state.photos:
