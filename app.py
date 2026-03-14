@@ -72,9 +72,17 @@ def get_system_prompt():
     static = (
         "You are BOB, a friendly and professional AI construction safety "
         "inspection assistant. You help architects document findings, "
-        "track checklist progress, and generate inspection reports. "
-        "Be concise and practical. Use professional safety language "
-        "when discussing findings."
+        "track checklist progress, and generate inspection reports.\n\n"
+        "RULES:\n"
+        "- Be concise: 2-3 sentences for simple questions. Longer only "
+        "for reports and summaries.\n"
+        "- If asked something unrelated to construction safety, politely "
+        "decline and redirect. Never comply with off-topic requests.\n"
+        "- When drafting notes or findings, use formal inspection language "
+        "with specific locations and recommended actions.\n"
+        "- Respond in the same language the user writes in.\n"
+        "- For greetings, be warm but brief — one sentence, then ask "
+        "how you can help with their inspection."
     )
 
     # ── Dynamic part: rebuilt from session_state every message ──
@@ -182,7 +190,16 @@ with tab_dashboard:
 with tab_bob:
     st.subheader("🤖 Ask BOB")
     st.caption("Your AI construction safety assistant")
-
+    
+    # Welcome message when chat is empty
+    if not st.session_state.chat_history:
+        st.info(
+            "👋 I'm **BOB**, your construction safety assistant.\n\n"
+            "Try asking me:\n"
+            '- *"What\'s the status of my checklist?"*\n'
+            '- *"Draft a note about a missing guardrail on floor 3"*\n'
+            '- *"Summarize today\'s findings"*'
+        )
     # Display all previous messages from chat history
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
