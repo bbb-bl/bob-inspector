@@ -178,9 +178,10 @@ tab_inspection, tab_dashboard, tab_bob = st.tabs([
 
 # ── Tab 1: Inspection ────────────────────────────────────────
 with tab_inspection:
-    st.subheader("📋 On-Site Inspection")
-    st.write("Coming soon — Samreen's checklist + Eng's photo upload go here.")
-
+    from components.inspection import render
+    render()
+    st.write("Coming soon — Samreen's checklist")
+             
 # ── Tab 2: Dashboard ─────────────────────────────────────────
 with tab_dashboard:
     st.subheader("📊 Dashboard")
