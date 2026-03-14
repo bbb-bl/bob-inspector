@@ -1,10 +1,13 @@
-from groq import Groq
+
+from openai import OpenAI
 import base64, streamlit as st, json, re
 
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+client = OpenAI(
+    api_key=st.secrets["GROQ_API_KEY"],
+    base_url="https://api.groq.com/openai/v1"
+)
 
-CHAT_MODEL   = "llama-3.3-70b-versatile"
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
 def chat(messages: list, system: str = "") -> str:
@@ -13,7 +16,7 @@ def chat(messages: list, system: str = "") -> str:
         full_messages.append({"role": "system", "content": system})
     full_messages.extend(messages)
     response = client.chat.completions.create(
-        model=CHAT_MODEL,
+        model=MODEL,
         messages=full_messages,
         max_tokens=1024,
     )
@@ -23,7 +26,7 @@ def chat(messages: list, system: str = "") -> str:
 def describe_photo(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
     b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     response = client.chat.completions.create(
-        model=VISION_MODEL,
+        model=MODEL,
         messages=[{
             "role": "user",
             "content": [
