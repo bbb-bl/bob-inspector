@@ -1,0 +1,41 @@
+[
+  {
+    "id": "proj-001",
+    "name": "Barceloneta Office Renovation",
+    "address": "Carrer de la Marina 12, Barcelona",
+    "building_type": "Commercial",
+    "status": "In progress",
+    "last_inspection": "2025-03-10",
+    "total_inspections": 3,
+    "open_findings": 4,
+    "critical_findings": 1,
+    "inspector": "Maria Garcia",
+    "notes": "Phase 2 structural work ongoing. Third floor incomplete."
+  },
+  {
+    "id": "proj-002",
+    "name": "Eixample Residential Complex",
+    "address": "Carrer de Provença 280, Barcelona",
+    "building_type": "Residential",
+    "status": "In progress",
+    "last_inspection": "2025-03-08",
+    "total_inspections": 5,
+    "open_findings": 2,
+    "critical_findings": 0,
+    "inspector": "Maria Garcia",
+    "notes": "Floors 1–4 complete. Roof work starting next week."
+  },
+  {
+    "id": "proj-003",
+    "name": "Gracia Primary School Extension",
+    "address": "Carrer de Verdi 45, Barcelona",
+    "building_type": "Educational",
+    "status": "Pending review",
+    "last_inspection": "2025-02-28",
+    "total_inspections": 2,
+    "open_findings": 7,
+    "critical_findings": 3,
+    "inspector": "Maria Garcia",
+    "notes": "Urgent: multiple critical findings from last visit unresolved."
+  }
+]
