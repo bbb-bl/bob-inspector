@@ -1,0 +1,104 @@
+{
+  "project_id": "proj-001",
+  "inspection_date": "2025-03-14",
+  "inspector": "Maria Garcia",
+  "checklist_items": [
+    {
+      "id": "chk-001",
+      "text": "Personal protective equipment (PPE) available on site",
+      "severity": "Critical",
+      "checked": true,
+      "notes": "Hard hats, vests, and boots confirmed at site entrance."
+    },
+    {
+      "id": "chk-002",
+      "text": "Emergency exit routes clearly marked and unobstructed",
+      "severity": "Critical",
+      "checked": true,
+      "notes": "All three exit routes verified clear."
+    },
+    {
+      "id": "chk-003",
+      "text": "Scaffolding inspected and certified",
+      "severity": "Critical",
+      "checked": false,
+      "notes": ""
+    },
+    {
+      "id": "chk-004",
+      "text": "Fire extinguishers present and in-date",
+      "severity": "High",
+      "checked": true,
+      "notes": "6 extinguishers on floors 1–3. All valid until Dec 2025."
+    },
+    {
+      "id": "chk-005",
+      "text": "Electrical installations covered and protected",
+      "severity": "High",
+      "checked": false,
+      "notes": ""
+    },
+    {
+      "id": "chk-006",
+      "text": "Waste and debris removed from walkways",
+      "severity": "Medium",
+      "checked": true,
+      "notes": ""
+    },
+    {
+      "id": "chk-007",
+      "text": "Machinery safety guards in place",
+      "severity": "High",
+      "checked": true,
+      "notes": "Concrete mixer and drill press checked."
+    },
+    {
+      "id": "chk-008",
+      "text": "Fall protection installed at open edges (floor 3)",
+      "severity": "Critical",
+      "checked": false,
+      "notes": "URGENT: Third floor east edge has no guard rail."
+    }
+  ],
+  "photos": [
+    {
+      "id": "photo-001",
+      "filename": "floor3_east_edge.jpg",
+      "timestamp": "2025-03-14T10:15:00",
+      "location": "Floor 3 — East edge",
+      "ai_description": "Open edge on the third floor with no guard rail or fall protection. A drop of approximately 9 metres to the ground below. High risk of fall incident.",
+      "hazard_flag": true,
+      "hazard_details": "Missing fall protection. Immediate corrective action required per RD 1627/1997 Article 6."
+    },
+    {
+      "id": "photo-002",
+      "filename": "ppe_station.jpg",
+      "timestamp": "2025-03-14T09:30:00",
+      "location": "Site entrance",
+      "ai_description": "PPE station at site entrance. Hard hats, high-visibility vests, and steel-capped boots stocked and accessible. Signage visible in Spanish and English.",
+      "hazard_flag": false,
+      "hazard_details": ""
+    },
+    {
+      "id": "photo-003",
+      "filename": "electrical_panel.jpg",
+      "timestamp": "2025-03-14T11:00:00",
+      "location": "Floor 2 — North corridor",
+      "ai_description": "Temporary electrical distribution panel with exposed wiring connections. Two cable runs lack protective conduit. Risk of electric shock and short circuit.",
+      "hazard_flag": true,
+      "hazard_details": "Exposed wiring does not comply with ITC-BT-33 temporary installation standards."
+    }
+  ],
+  "voice_notes": [
+    {
+      "id": "vn-001",
+      "timestamp": "2025-03-14T10:20:00",
+      "text": "Third floor east edge has no guard rail whatsoever. Workers are currently operating within two metres of the drop. This needs to be addressed before any further work on that floor. Escalating to critical."
+    },
+    {
+      "id": "vn-002",
+      "timestamp": "2025-03-14T11:05:00",
+      "text": "Electrical panel on floor two looks problematic. Temporay cabling without conduit. I've photographed it. Recommend an electrician signs off before end of week."
+    }
+  ]
+}

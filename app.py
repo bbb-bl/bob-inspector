@@ -184,8 +184,8 @@ with tab_inspection:
              
 # ── Tab 2: Dashboard ─────────────────────────────────────────
 with tab_dashboard:
-    st.subheader("📊 Dashboard")
-    st.write("Coming soon — Aymen's project cards + report generation go here.")
+    from components.dashboard import render_dashboard
+    render_dashboard()
 
 # ── Tab 3: BOB Chatbot ───────────────────────────────────────
 with tab_bob:
