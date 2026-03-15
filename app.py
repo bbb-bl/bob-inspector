@@ -180,7 +180,6 @@ tab_inspection, tab_dashboard, tab_bob = st.tabs([
 with tab_inspection:
     from components.inspection import render
     render()
-    st.write("Coming soon — Samreen's checklist")
              
 # ── Tab 2: Dashboard ─────────────────────────────────────────
 with tab_dashboard:
