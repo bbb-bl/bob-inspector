@@ -142,7 +142,8 @@ def render():
     # Render each zone as an expander
     for zone, zone_items in zones.items():
         zone_checked = sum(1 for i in zone_items if i["checked"])
-        with st.expander(f"{zone}  ({zone_checked}/{len(zone_items)} done)", expanded=False):
+        is_open = st.session_state.get("open_zone") == zone
+        with st.expander(f"{zone}  ({zone_checked}/{len(zone_items)} done)", expanded=is_open):
             for item in zone_items:
 
                 # Severity badge
@@ -163,6 +164,8 @@ def render():
                     )
                     if checked != item["checked"]:
                         item["checked"] = checked
+                        st.session_state["open_zone"] = zone
+                        st.rerun()
 
                 with col2:
                     st.markdown(badge, unsafe_allow_html=True)
