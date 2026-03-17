@@ -57,9 +57,9 @@ def render():
                     st.caption(f"🖼️ {photo['filename']} (no preview)")
                 # Metadata
                 st.caption(
-                    f"📁 {photo['project_id']}  |  "
-                    f"📍 {photo['location']}  |  "
-                    f"🕐 {photo['timestamp'][:10]}"
+                    f"📁 {photo.get('project_id', 'N/A')}  |  "
+                    f"📍 {photo.get('location', 'N/A')}  |  "
+                    f"🕐 {photo.get('timestamp', '')[:10]}"
                 )
                 # Hazard status
                 if photo["hazard_flag"]:
