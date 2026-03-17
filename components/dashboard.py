@@ -63,11 +63,11 @@ def render_dashboard():
     total_critical = sum(p.get("critical_findings", 0) for p in projects)
     total_inspections = sum(p.get("total_inspections", 0) for p in projects)
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Projects", total_projects)
-    col2.metric("Open Findings", total_open)
-    col3.metric("Critical", total_critical, delta=None if total_critical == 0 else f"{total_critical} urgent", delta_color="inverse")
-    col4.metric("Total Inspections", total_inspections)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Projects", total_projects)
+    m2.metric("Open Findings", total_open)
+    m3.metric("Critical", total_critical, delta=None if total_critical == 0 else f"{total_critical} urgent", delta_color="inverse")
+    m4.metric("Total Inspections", total_inspections)
 
     st.divider()
 
@@ -103,9 +103,48 @@ def render_dashboard():
             with btn_col:
                 if st.button("Start inspection →", key=f"start_{project['id']}"):
                     st.session_state.current_project = project
-                    # Signal app.py to switch to the Inspection tab
                     st.session_state.active_tab = "Inspection"
                     st.rerun()
 
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
+
+    # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────
+    st.divider()
+    st.subheader(f"📸 Photo Gallery ({len(st.session_state.photos)} photos)")
+
+    if st.session_state.photos:
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            project_ids = ["All"] + list({p["project_id"] for p in st.session_state.photos})
+            selected_project = st.selectbox("Project", project_ids)
+        with f2:
+            hazards_only = st.checkbox("⚠️ Hazards only")
+        with f3:
+            search_query = st.text_input("🔍 Search descriptions")
+
+        # Apply filters
+        filtered = st.session_state.photos
+        if selected_project != "All":
+            filtered = [p for p in filtered if p["project_id"] == selected_project]
+        if hazards_only:
+            filtered = [p for p in filtered if p["hazard_flag"]]
+        if search_query:
+            q = search_query.lower()
+            filtered = [p for p in filtered if q in p.get("ai_description", "").lower()]
+
+        if not filtered:
+            st.info("No photos match the current filters.")
+        else:
+            grid = st.columns(3)
+            for i, photo in enumerate(filtered):
+                with grid[i % 3]:
+                    with st.expander(photo["filename"], expanded=False):
+                        st.image(photo["image_bytes"], use_column_width=True)
+                        if photo["hazard_flag"]:
+                            st.error(f"⚠️ {photo.get('hazard_details', '')}")
+                        st.markdown(f"**Description:** {photo.get('ai_description', '_Not yet analysed_')}")
+                        st.caption(f"🗂 Project: `{photo['project_id']}`")
+                        st.caption(f"📍 {photo['location']}  |  🕐 {photo['timestamp'][:16]}")
+    else:
+        st.info("No photos yet — upload from the Inspection tab.")
