@@ -1,7 +1,8 @@
 """
 components/dashboard.py
 Aymen — Day 2: Dashboard tab
-Renders project summary metrics and project cards.
+Aymen — Day 3: Report generation
+Aymen — Day 4: Download button
 """
 
 import json
@@ -28,7 +29,6 @@ def load_sample_inspection():
         try:
             with open(data_path, "r", encoding="utf-8") as f:
                 sample = json.load(f)
-            # Only pre-load if no live inspection is already in progress
             if not st.session_state.get("checklist_items"):
                 st.session_state.checklist_items = sample.get("checklist_items", [])
             if not st.session_state.get("photos"):
@@ -36,7 +36,7 @@ def load_sample_inspection():
             if not st.session_state.get("voice_notes"):
                 st.session_state.voice_notes = sample.get("voice_notes", [])
         except FileNotFoundError:
-            pass  # Sample data optional
+            pass
         st.session_state.sample_inspection_loaded = True
 
 
@@ -48,6 +48,57 @@ STATUS_COLORS = {
 }
 
 
+def render_report_section():
+    """Day 3 & 4 — Report generation and download."""
+    from utils.report import generate_report
+
+    st.divider()
+    st.markdown("### 📄 Generate Inspection Report")
+
+    project = st.session_state.get("current_project")
+    checklist_items = st.session_state.get("checklist_items", [])
+    photos = st.session_state.get("photos", [])
+    voice_notes = st.session_state.get("voice_notes", [])
+
+    if not project:
+        st.info("👆 Click 'Start inspection →' on a project above to select it first.")
+        return
+
+    st.caption(f"Generating report for: **{project['name']}**")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Checklist items", len(checklist_items))
+    col2.metric("Photos", len(photos))
+    col3.metric("Voice notes", len(voice_notes))
+
+    if st.button("🤖 Generate report with AI", type="primary"):
+        with st.spinner("BOB is writing your report..."):
+            try:
+                report = generate_report(project, checklist_items, photos, voice_notes)
+                st.session_state.generated_report = report
+            except Exception as e:
+                st.error(f"Error generating report: {str(e)}")
+                return
+
+    if st.session_state.get("generated_report"):
+        st.success("✅ Report generated!")
+
+        edited_report = st.text_area(
+            "Report (you can edit before downloading)",
+            value=st.session_state.generated_report,
+            height=400,
+        )
+        st.session_state.generated_report = edited_report
+
+        project_name = project.get("name", "inspection").replace(" ", "_")
+        st.download_button(
+            label="⬇️ Download report (.md)",
+            data=st.session_state.generated_report,
+            file_name=f"inspection_{project_name}.md",
+            mime="text/markdown",
+        )
+
+
 def render_dashboard():
     """Main entry point — call this inside the Dashboard tab."""
     load_projects()
@@ -57,7 +108,6 @@ def render_dashboard():
 
     st.markdown("## 📊 Project Overview")
 
-    # ── Summary metrics ──────────────────────────────────────────────────────
     total_projects = len(projects)
     total_open = sum(p.get("open_findings", 0) for p in projects)
     total_critical = sum(p.get("critical_findings", 0) for p in projects)
@@ -71,7 +121,6 @@ def render_dashboard():
 
     st.divider()
 
-    # ── Project cards ─────────────────────────────────────────────────────────
     st.markdown("### Projects")
 
     if not projects:
@@ -103,9 +152,10 @@ def render_dashboard():
             with btn_col:
                 if st.button("Start inspection →", key=f"start_{project['id']}"):
                     st.session_state.current_project = project
-                    # Signal app.py to switch to the Inspection tab
                     st.session_state.active_tab = "Inspection"
                     st.rerun()
 
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
+
+    render_report_section()
