@@ -113,11 +113,11 @@ def render_dashboard():
     total_critical = sum(p.get("critical_findings", 0) for p in projects)
     total_inspections = sum(p.get("total_inspections", 0) for p in projects)
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Projects", total_projects)
-    col2.metric("Open Findings", total_open)
-    col3.metric("Critical", total_critical, delta=None if total_critical == 0 else f"{total_critical} urgent", delta_color="inverse")
-    col4.metric("Total Inspections", total_inspections)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Projects", total_projects)
+    m2.metric("Open Findings", total_open)
+    m3.metric("Critical", total_critical, delta=None if total_critical == 0 else f"{total_critical} urgent", delta_color="inverse")
+    m4.metric("Total Inspections", total_inspections)
 
     st.divider()
 
