@@ -190,7 +190,10 @@ def render_dashboard():
             for i, photo in enumerate(filtered):
                 with grid[i % 3]:
                     with st.expander(photo["filename"], expanded=False):
-                        st.image(photo["image_bytes"], use_column_width=True)
+                        if photo.get("image_bytes"):
+                            st.image(photo["image_bytes"], use_column_width=True)
+                        else:
+                            st.caption("🖼️ No preview available")
                         if photo["hazard_flag"]:
                             st.error(f"⚠️ {photo.get('hazard_details', '')}")
                         st.markdown(f"**Description:** {photo.get('ai_description', '_Not yet analysed_')}")

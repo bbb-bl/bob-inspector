@@ -51,7 +51,10 @@ def render():
         cols = st.columns(3)
         for i, photo in enumerate(st.session_state.photos):
             with cols[i % 3]:
-                st.image(photo["image_bytes"], caption=photo["filename"], width=200)
+                if photo.get("image_bytes"):
+                    st.image(photo["image_bytes"], caption=photo["filename"], width=200)
+                else:
+                    st.caption(f"🖼️ {photo['filename']} (no preview)")
                 # Metadata
                 st.caption(
                     f"📁 {photo['project_id']}  |  "
@@ -78,7 +81,7 @@ def render():
             with st.spinner("Analysing photos..."):
                 success, failed = 0, 0
                 for photo in st.session_state.photos:
-                    if photo["ai_description"] == "":
+                    if photo["ai_description"] == "" and photo.get("image_bytes"):
                         try:
                             result = describe_photo(photo["image_bytes"])
                             photo["ai_description"] = result["description"]
