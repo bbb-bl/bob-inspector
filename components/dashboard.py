@@ -1,7 +1,8 @@
 """
 components/dashboard.py
 Aymen — Day 2: Dashboard tab
-Renders project summary metrics and project cards.
+Aymen — Day 3: Report generation
+Aymen — Day 4: Download button
 """
 
 import json
@@ -28,7 +29,6 @@ def load_sample_inspection():
         try:
             with open(data_path, "r", encoding="utf-8") as f:
                 sample = json.load(f)
-            # Only pre-load if no live inspection is already in progress
             if not st.session_state.get("checklist_items"):
                 st.session_state.checklist_items = sample.get("checklist_items", [])
             if not st.session_state.get("photos"):
@@ -36,7 +36,7 @@ def load_sample_inspection():
             if not st.session_state.get("voice_notes"):
                 st.session_state.voice_notes = sample.get("voice_notes", [])
         except FileNotFoundError:
-            pass  # Sample data optional
+            pass
         st.session_state.sample_inspection_loaded = True
 
 
@@ -48,6 +48,57 @@ STATUS_COLORS = {
 }
 
 
+def render_report_section():
+    """Day 3 & 4 — Report generation and download."""
+    from utils.report import generate_report
+
+    st.divider()
+    st.markdown("### 📄 Generate Inspection Report")
+
+    project = st.session_state.get("current_project")
+    checklist_items = st.session_state.get("checklist_items", [])
+    photos = st.session_state.get("photos", [])
+    voice_notes = st.session_state.get("voice_notes", [])
+
+    if not project:
+        st.info("👆 Click 'Start inspection →' on a project above to select it first.")
+        return
+
+    st.caption(f"Generating report for: **{project['name']}**")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Checklist items", len(checklist_items))
+    col2.metric("Photos", len(photos))
+    col3.metric("Voice notes", len(voice_notes))
+
+    if st.button("🤖 Generate report with AI", type="primary"):
+        with st.spinner("BOB is writing your report..."):
+            try:
+                report = generate_report(project, checklist_items, photos, voice_notes)
+                st.session_state.generated_report = report
+            except Exception as e:
+                st.error(f"Error generating report: {str(e)}")
+                return
+
+    if st.session_state.get("generated_report"):
+        st.success("✅ Report generated!")
+
+        edited_report = st.text_area(
+            "Report (you can edit before downloading)",
+            value=st.session_state.generated_report,
+            height=400,
+        )
+        st.session_state.generated_report = edited_report
+
+        project_name = project.get("name", "inspection").replace(" ", "_")
+        st.download_button(
+            label="⬇️ Download report (.md)",
+            data=st.session_state.generated_report,
+            file_name=f"inspection_{project_name}.md",
+            mime="text/markdown",
+        )
+
+
 def render_dashboard():
     """Main entry point — call this inside the Dashboard tab."""
     load_projects()
@@ -57,7 +108,6 @@ def render_dashboard():
 
     st.markdown("## 📊 Project Overview")
 
-    # ── Summary metrics ──────────────────────────────────────────────────────
     total_projects = len(projects)
     total_open = sum(p.get("open_findings", 0) for p in projects)
     total_critical = sum(p.get("critical_findings", 0) for p in projects)
@@ -71,7 +121,6 @@ def render_dashboard():
 
     st.divider()
 
-    # ── Project cards ─────────────────────────────────────────────────────────
     st.markdown("### Projects")
 
     if not projects:
@@ -109,42 +158,4 @@ def render_dashboard():
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
 
-    # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────
-    st.divider()
-    st.subheader(f"📸 Photo Gallery ({len(st.session_state.photos)} photos)")
-
-    if st.session_state.photos:
-        f1, f2, f3 = st.columns(3)
-        with f1:
-            project_ids = ["All"] + list({p["project_id"] for p in st.session_state.photos})
-            selected_project = st.selectbox("Project", project_ids)
-        with f2:
-            hazards_only = st.checkbox("⚠️ Hazards only")
-        with f3:
-            search_query = st.text_input("🔍 Search descriptions")
-
-        # Apply filters
-        filtered = st.session_state.photos
-        if selected_project != "All":
-            filtered = [p for p in filtered if p["project_id"] == selected_project]
-        if hazards_only:
-            filtered = [p for p in filtered if p["hazard_flag"]]
-        if search_query:
-            q = search_query.lower()
-            filtered = [p for p in filtered if q in p.get("ai_description", "").lower()]
-
-        if not filtered:
-            st.info("No photos match the current filters.")
-        else:
-            grid = st.columns(3)
-            for i, photo in enumerate(filtered):
-                with grid[i % 3]:
-                    with st.expander(photo["filename"], expanded=False):
-                        st.image(photo["image_bytes"], use_column_width=True)
-                        if photo["hazard_flag"]:
-                            st.error(f"⚠️ {photo.get('hazard_details', '')}")
-                        st.markdown(f"**Description:** {photo.get('ai_description', '_Not yet analysed_')}")
-                        st.caption(f"🗂 Project: `{photo['project_id']}`")
-                        st.caption(f"📍 {photo['location']}  |  🕐 {photo['timestamp'][:16]}")
-    else:
-        st.info("No photos yet — upload from the Inspection tab.")
+    render_report_section()
