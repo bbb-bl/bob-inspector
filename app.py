@@ -50,7 +50,12 @@ if "chat_history" not in st.session_state:
 
 if "voice_notes" not in st.session_state:
     st.session_state.voice_notes = []
-    # List of {timestamp, text} dicts
+
+# Always reset recording state on startup
+if "recording" not in st.session_state:
+    st.session_state.recording = False
+if "voice_transcription_index" not in st.session_state:
+    st.session_state.voice_transcription_index = 0
 
 # ── BOB Chat Logic ───────────────────────────────────────────
 from openai import OpenAI
