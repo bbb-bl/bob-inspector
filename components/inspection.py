@@ -97,6 +97,103 @@ def render():
             if failed:
                 st.warning(f"{failed} photo(s) failed.")
             st.rerun()
+# ── VOICE NOTES ────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🎙 Voice Notes")
+
+    if "voice_transcription_index" not in st.session_state:
+        st.session_state.voice_transcription_index = 0
+    if "added_to_checklist" not in st.session_state:
+        st.session_state.added_to_checklist = set()
+
+    if "recording" not in st.session_state:
+        st.session_state.recording = False
+
+    col_rec, col_status = st.columns([0.3, 0.7])
+
+    with col_rec:
+        if not st.session_state.recording:
+            if st.button("🎙 Start recording", key="start_rec"):
+                st.session_state.recording = True
+                st.rerun()
+        else:
+            if st.button("⏹ Stop recording", key="stop_rec"):
+                import json
+                try:
+                    with open("data/voice_transcriptions.json", "r") as f:
+                        transcriptions = json.load(f)
+                    idx = st.session_state.voice_transcription_index % len(transcriptions)
+                    picked = transcriptions[idx]
+                    st.session_state.voice_notes.append({
+                        "timestamp": datetime.now().strftime("%H:%M"),
+                        "text": picked["text"],
+                        "zone": picked["zone"],
+                        "severity": picked["auto_severity"]
+                    })
+                    st.session_state.voice_transcription_index += 1
+                except Exception as e:
+                    st.error(f"Could not load transcription: {e}")
+                st.session_state.recording = False
+                st.rerun()
+
+    with col_status:
+        if st.session_state.recording:
+            st.markdown(
+                '<div style="background:#FF4444;color:white;padding:8px 16px;border-radius:6px;font-size:14px;">🔴 Recording... speak your observation</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.caption("Press start to record an on-site observation")
+
+    # Remove any stale notes missing required keys
+    st.session_state.voice_notes = [
+        n for n in st.session_state.voice_notes
+        if all(k in n for k in ["text", "timestamp", "zone", "severity"])
+    ]
+
+    if st.session_state.voice_notes:
+        st.markdown("**Recorded notes**")
+        for i, note in enumerate(st.session_state.voice_notes):
+            with st.container():
+                col_note, col_add = st.columns([0.8, 0.2])
+                with col_note:
+                    sev = note.get("severity", "Recommendation")
+                    if sev == "Critical":
+                        badge = '<span style="background:#FF4444;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Critical</span>'
+                    elif sev == "Minor":
+                        badge = '<span style="background:#E8940A;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Minor</span>'
+                    else:
+                        badge = '<span style="background:#2855C8;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Rec</span>'
+                    st.markdown(
+                        f'<div style="padding:8px 0">'
+                        f'<span style="font-size:12px;color:gray">{note["timestamp"]}  ·  {note["zone"]}</span>  {badge}<br>'
+                        f'<span style="font-size:14px">{note["text"]}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                with col_add:
+                    if i in st.session_state.added_to_checklist:
+                        st.markdown(
+                            '<span style="color:#2E8B57;font-weight:bold;font-size:13px">✓ Added</span>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        if st.button("+ Checklist", key=f"add_note_{i}"):
+                            new_item = {
+                                "id": f"VOICE-{str(uuid.uuid4())[:6]}",
+                                "text": note["text"],
+                                "detail": "Added from voice note",
+                                "zone": note["zone"],
+                                "building_type": "All",
+                                "category": "Voice Note",
+                                "regulation_ref": "",
+                                "checked": False,
+                                "notes": "",
+                                "severity": note.get("severity", "Recommendation")
+                            }
+                            st.session_state.checklist_items.append(new_item)
+                            st.session_state.added_to_checklist.add(i)
+                            st.rerun()
 
 #CHECKLIST
     st.divider()
