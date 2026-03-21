@@ -133,33 +133,188 @@ def get_system_prompt():
 
     return static + project_info + checklist_info + photo_info
 
+# ── BOB Tools (Category C: LLM decides which to call) ────────
+def get_checklist_summary():
+    """Returns checklist progress grouped by zone."""
+    items = st.session_state.checklist_items
+    if not items:
+        return "No checklist loaded yet."
+
+    checked = sum(1 for i in items if i.get("checked"))
+    total = len(items)
+
+    # Group by zone
+    zones = {}
+    for item in items:
+        zone = item.get("zone", "Unknown")
+        zones.setdefault(zone, {"checked": 0, "total": 0})
+        zones[zone]["total"] += 1
+        if item.get("checked"):
+            zones[zone]["checked"] += 1
+
+    result = f"Checklist: {checked}/{total} items completed.\n\nBy zone:\n"
+    for zone, counts in zones.items():
+        result += f"  {zone}: {counts['checked']}/{counts['total']}\n"
+
+    # List unchecked items
+    unchecked = [i for i in items if not i.get("checked")]
+    if unchecked:
+        result += f"\nUnchecked items ({len(unchecked)}):\n"
+        for i in unchecked:
+            result += f"  - [{i.get('severity', '?')}] {i.get('text', 'Unknown')}\n"
+
+    return result
+
+
+def get_photo_hazards():
+    """Returns list of photos where hazards were detected."""
+    photos = st.session_state.photos
+    if not photos:
+        return "No photos uploaded yet."
+
+    hazards = [p for p in photos if p.get("hazard_flag")]
+    if not hazards:
+        return f"{len(photos)} photos uploaded. No hazards detected."
+
+    result = f"{len(photos)} photos uploaded. {len(hazards)} hazard(s) detected:\n\n"
+    for h in hazards:
+        result += (
+            f"  - {h.get('filename', 'Unknown')}: "
+            f"{h.get('ai_description', 'No description')} "
+            f"({h.get('hazard_details', '')})\n"
+        )
+    return result
+
+
+def get_critical_findings():
+    """Returns all critical unchecked items + hazard photos."""
+    items = st.session_state.checklist_items
+    photos = st.session_state.photos
+
+    critical_items = [
+        i for i in items
+        if i.get("severity") == "Critical" and not i.get("checked")
+    ]
+    hazard_photos = [p for p in photos if p.get("hazard_flag")]
+
+    if not critical_items and not hazard_photos:
+        return "No critical findings at this time."
+
+    result = ""
+    if critical_items:
+        result += f"Critical checklist items outstanding ({len(critical_items)}):\n"
+        for i in critical_items:
+            result += f"  - {i.get('text', 'Unknown')} (Zone: {i.get('zone', '?')})\n"
+
+    if hazard_photos:
+        result += f"\nPhoto hazards ({len(hazard_photos)}):\n"
+        for p in hazard_photos:
+            result += f"  - {p.get('filename', '?')}: {p.get('hazard_details', 'No details')}\n"
+
+    return result
+
+# ── Tool Definitions (sent to the LLM so it knows what's available) ──
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_checklist_summary",
+            "description": "Get the current checklist progress including completion counts by zone and list of unchecked items. Use when the user asks about checklist status, progress, what's done, or what's remaining.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_photo_hazards",
+            "description": "Get a list of all uploaded photos and any detected safety hazards. Use when the user asks about photos, hazards found in images, or site conditions captured on camera.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_critical_findings",
+            "description": "Get all critical severity items that are still unchecked plus any hazard photos. Use when the user asks about critical issues, urgent problems, what needs immediate attention, or wants a summary of the most important findings.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+]
+
+# Map tool names to actual functions
+TOOL_FUNCTIONS = {
+    "get_checklist_summary": get_checklist_summary,
+    "get_photo_hazards": get_photo_hazards,
+    "get_critical_findings": get_critical_findings,
+}
 
 def get_bob_response(user_message):
     """
-    Sends the user's message to Groq and returns BOB's response.
-    Includes full chat history so the LLM has conversation context.
+    Category C: Multi-call tool_use pattern.
+    1. Send message + tool definitions to LLM
+    2. If LLM wants to call a tool → run the function → send result back
+    3. LLM responds with real data
     """
 
-# Build the messages list: system prompt + chat history + new message
+    # Build messages: system prompt + history + new message
     messages = []
-
-    # System prompt FIRST — this is how BOB knows who it is
     messages.append({"role": "system", "content": get_system_prompt()})
 
-    # Add conversation history (so BOB remembers earlier turns)
     for msg in st.session_state.chat_history:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    # Add the new user message
+        # Only include simple text messages (skip tool calls in history)
+        if msg.get("role") in ["user", "assistant"] and isinstance(msg.get("content"), str):
+            messages.append({"role": msg["role"], "content": msg["content"]})
+
     messages.append({"role": "user", "content": user_message})
 
     try:
+        # ── LLM Call #1: Send message WITH tool definitions ──
         response = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             max_tokens=1024,
             messages=messages,
+            tools=TOOLS,           # <-- This is new: tells LLM what tools exist
+            tool_choice="auto",    # <-- LLM decides whether to use a tool
             temperature=0.7,
         )
-        return response.choices[0].message.content
+
+        assistant_message = response.choices[0].message
+
+        # ── Check: did the LLM want to call a tool? ──
+        if assistant_message.tool_calls:
+            # LLM chose to call one or more tools
+            # Add the assistant's tool call message to the conversation
+            messages.append(assistant_message)
+
+            # Execute each tool the LLM requested
+            for tool_call in assistant_message.tool_calls:
+                function_name = tool_call.function.name
+
+                # Look up and run the matching Python function
+                if function_name in TOOL_FUNCTIONS:
+                    tool_result = TOOL_FUNCTIONS[function_name]()
+                else:
+                    tool_result = f"Unknown tool: {function_name}"
+
+                # Add the tool result to the conversation
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": tool_result,
+                })
+
+            # ── LLM Call #2: Now answer WITH the real data ──
+            final_response = client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                max_tokens=1024,
+                messages=messages,
+                temperature=0.7,
+            )
+            return final_response.choices[0].message.content
+
+        else:
+            # LLM answered directly without needing a tool
+            return assistant_message.content
 
     except Exception as e:
         return f"Sorry, BOB encountered an error: {str(e)}"
