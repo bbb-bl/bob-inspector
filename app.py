@@ -81,13 +81,13 @@ def get_system_prompt():
         "RULES:\n"
         "- Be concise: 2-3 sentences for simple questions. Longer only "
         "for reports and summaries.\n"
-        "- If asked something unrelated to construction safety, politely "
-        "decline and redirect. Never comply with off-topic requests.\n"
-        "- When drafting notes or findings, use formal inspection language "
-        "with specific locations and recommended actions.\n"
-        "- Respond in the same language the user writes in.\n"
-        "- For greetings, be warm but brief — one sentence, then ask "
-        "how you can help with their inspection."
+        "- If asked something unrelated to construction safety (e.g. poems, "
+        "recipes, sports), politely decline. Fire safety, electrical safety, "
+        "PPE, scaffolding, hazardous materials — these are ALL part of your "
+        "domain. Never refuse safety-related questions.\n"
+        "- ALWAYS use the lookup_regulation tool when asked about regulations, "
+        "rules, laws, or requirements. Never answer regulation questions from "
+        "general knowledge — always look them up.\n"
     )
 
     # ── Dynamic part: rebuilt from session_state every message ──
@@ -213,6 +213,44 @@ def get_critical_findings():
 
     return result
 
+def lookup_regulation(query: str):
+    """Mini-RAG: searches checklist data for regulation references matching the query."""
+    import pandas as pd
+
+    try:
+        df = pd.read_csv("data/checklist.csv")
+    except FileNotFoundError:
+        return "No regulation data available."
+
+# Search across text, category, and regulation_ref columns
+# Split query into individual words and search for ANY match
+    words = query.lower().split()
+    mask = pd.Series([False] * len(df))
+    for word in words:
+        if len(word) < 3:  # Skip tiny words like "the", "is", "a"
+            continue
+        mask = mask | (
+            df["text"].str.lower().str.contains(word, na=False) |
+            df["category"].str.lower().str.contains(word, na=False) |
+            df["regulation_ref"].str.lower().str.contains(word, na=False) |
+            df["detail"].str.lower().str.contains(word, na=False)
+        )
+    matches = df[mask]
+
+    if matches.empty:
+        return f"No regulations found matching '{query}'."
+
+    result = f"Found {len(matches)} regulation(s) matching '{query}':\n\n"
+    for _, row in matches.iterrows():
+        result += (
+            f"  - {row['text']}\n"
+            f"    Category: {row['category']}\n"
+            f"    Regulation: {row['regulation_ref']}\n"
+            f"    Severity: {row['severity_default']}\n"
+            f"    Detail: {row['detail'][:100]}...\n\n"
+        )
+    return result
+
 # ── Tool Definitions (sent to the LLM so it knows what's available) ──
 TOOLS = [
     {
@@ -239,6 +277,23 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "lookup_regulation",
+            "description": "Search the safety regulation database for rules about a specific topic. Use when the user asks about regulations, rules, legal requirements, compliance, or what the law says about a specific safety topic like scaffolding, electrical, fire safety, PPE, etc.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The safety topic to search for, e.g. 'scaffolding', 'electrical', 'fire safety', 'PPE'"
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 # Map tool names to actual functions
@@ -246,13 +301,14 @@ TOOL_FUNCTIONS = {
     "get_checklist_summary": get_checklist_summary,
     "get_photo_hazards": get_photo_hazards,
     "get_critical_findings": get_critical_findings,
+    "lookup_regulation": lookup_regulation,
 }
 
 def get_bob_response(user_message):
     """
     Category C: Multi-call tool_use pattern.
     1. Send message + tool definitions to LLM
-    2. If LLM wants to call a tool → run the function → send result back
+    2. If LLM wants to call a tool -> run the function -> send result back
     3. LLM responds with real data
     """
 
@@ -292,9 +348,15 @@ def get_bob_response(user_message):
 
                 # Look up and run the matching Python function
                 if function_name in TOOL_FUNCTIONS:
-                    tool_result = TOOL_FUNCTIONS[function_name]()
+                    import json as _json
+                    try:
+                        args = _json.loads(tool_call.function.arguments)
+                    except (ValueError, TypeError):
+                        args = {}
+                    tool_result = TOOL_FUNCTIONS[function_name](**args)
                 else:
                     tool_result = f"Unknown tool: {function_name}"
+
 
                 # Add the tool result to the conversation
                 messages.append({
