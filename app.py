@@ -275,6 +275,28 @@ def lookup_regulation(query: str):
         )
     return result
 
+def generate_report_via_chat():
+    """Generates an inspection report using Aymen's report pipeline, triggered from BOB chat."""
+    from utils.report import generate_report
+
+    project = st.session_state.current_project
+    if not project:
+        return "No project selected. Please select a project from the Dashboard first."
+
+    checklist_items = st.session_state.checklist_items
+    photos = st.session_state.photos
+    voice_notes = st.session_state.voice_notes
+
+    if not checklist_items and not photos:
+        return "Not enough data to generate a report. Complete some checklist items or upload photos first."
+
+    try:
+        report = generate_report(project, checklist_items, photos, voice_notes)
+        st.session_state.generated_report = report
+        return f"Report generated successfully. Here it is:\n\n{report}"
+    except Exception as e:
+        return f"Error generating report: {str(e)}"
+
 # ── Tool Definitions (sent to the LLM so it knows what's available) ──
 TOOLS = [
     {
@@ -318,6 +340,14 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_report_via_chat",
+            "description": "Generate a full formal inspection report from all current data (checklist, photos, voice notes). Use when the user asks to generate, create, write, or produce an inspection report.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
 # Map tool names to actual functions
@@ -326,6 +356,7 @@ TOOL_FUNCTIONS = {
     "get_photo_hazards": get_photo_hazards,
     "get_critical_findings": get_critical_findings,
     "lookup_regulation": lookup_regulation,
+    "generate_report_via_chat": generate_report_via_chat,
 }
 
 def get_bob_response(user_message):
