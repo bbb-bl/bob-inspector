@@ -29,7 +29,7 @@
       "text": "Fire extinguishers present and in-date",
       "severity": "High",
       "checked": true,
-      "notes": "6 extinguishers on floors 1–3. All valid until Dec 2025."
+      "notes": "6 extinguishers on floors 1\u20133. All valid until Dec 2025."
     },
     {
       "id": "chk-005",
@@ -65,10 +65,12 @@
       "id": "photo-001",
       "filename": "floor3_east_edge.jpg",
       "timestamp": "2025-03-14T10:15:00",
-      "location": "Floor 3 — East edge",
+      "location": "Floor 3 \u2014 East edge",
       "ai_description": "Open edge on the third floor with no guard rail or fall protection. A drop of approximately 9 metres to the ground below. High risk of fall incident.",
       "hazard_flag": true,
-      "hazard_details": "Missing fall protection. Immediate corrective action required per RD 1627/1997 Article 6."
+      "hazard_details": "Missing fall protection. Immediate corrective action required per RD 1627/1997 Article 6.",
+      "project_id": "proj-001",
+      "image_bytes": null
     },
     {
       "id": "photo-002",
@@ -77,16 +79,20 @@
       "location": "Site entrance",
       "ai_description": "PPE station at site entrance. Hard hats, high-visibility vests, and steel-capped boots stocked and accessible. Signage visible in Spanish and English.",
       "hazard_flag": false,
-      "hazard_details": ""
+      "hazard_details": "",
+      "project_id": "proj-001",
+      "image_bytes": null
     },
     {
       "id": "photo-003",
       "filename": "electrical_panel.jpg",
       "timestamp": "2025-03-14T11:00:00",
-      "location": "Floor 2 — North corridor",
+      "location": "Floor 2 \u2014 North corridor",
       "ai_description": "Temporary electrical distribution panel with exposed wiring connections. Two cable runs lack protective conduit. Risk of electric shock and short circuit.",
       "hazard_flag": true,
-      "hazard_details": "Exposed wiring does not comply with ITC-BT-33 temporary installation standards."
+      "hazard_details": "Exposed wiring does not comply with ITC-BT-33 temporary installation standards.",
+      "project_id": "proj-001",
+      "image_bytes": null
     }
   ],
   "voice_notes": [
@@ -98,7 +104,7 @@
     {
       "id": "vn-002",
       "timestamp": "2025-03-14T11:05:00",
-      "text": "Electrical panel on floor two looks problematic. Temporay cabling without conduit. I've photographed it. Recommend an electrician signs off before end of week."
+      "text": "Electrical panel on floor two looks problematic. Temporary cabling without conduit. I've photographed it. Recommend an electrician signs off before end of week."
     }
   ]
 }

@@ -52,6 +52,10 @@ if "voice_notes" not in st.session_state:
     st.session_state.voice_notes = []
     # List of {timestamp, text} dicts
 
+if "generated_report" not in st.session_state:
+    st.session_state.generated_report = None
+    # str — AI-generated report text, set by Aymen's dashboard render_report_section()
+
 # ── BOB Chat Logic ───────────────────────────────────────────
 from openai import OpenAI
 
