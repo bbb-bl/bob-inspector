@@ -177,3 +177,45 @@ def render_dashboard():
                 st.caption(f"💬 {project['notes']}")
 
     render_report_section()
+
+    # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────
+    st.divider()
+    st.subheader(f"📸 Photo Gallery ({len(st.session_state.photos)} photos)")
+
+    if st.session_state.photos:
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            project_ids = ["All"] + list({p.get("project_id", "demo") for p in st.session_state.photos})
+            selected_project = st.selectbox("Project", project_ids)
+        with f2:
+            hazards_only = st.checkbox("⚠️ Hazards only")
+        with f3:
+            search_query = st.text_input("🔍 Search descriptions")
+
+        filtered = st.session_state.photos
+        if selected_project != "All":
+            filtered = [p for p in filtered if p.get("project_id", "N/A") == selected_project]
+        if hazards_only:
+            filtered = [p for p in filtered if p["hazard_flag"]]
+        if search_query:
+            q = search_query.lower()
+            filtered = [p for p in filtered if q in p.get("ai_description", "").lower()]
+
+        if not filtered:
+            st.info("No photos match the current filters.")
+        else:
+            grid = st.columns(3)
+            for i, photo in enumerate(filtered):
+                with grid[i % 3]:
+                    with st.expander(photo["filename"], expanded=False):
+                        if photo.get("image_bytes"):
+                            st.image(photo["image_bytes"], use_column_width=True)
+                        else:
+                            st.caption("🖼️ No preview available")
+                        if photo["hazard_flag"]:
+                            st.error(f"⚠️ {photo.get('hazard_details', '')}")
+                        st.markdown(f"**Description:** {photo.get('ai_description', '_Not yet analysed_')}")
+                        st.caption(f"🗂 Project: `{photo.get('project_id', 'N/A')}`")
+                        st.caption(f"📍 {photo.get('location', 'N/A')}  |  🕐 {photo.get('timestamp', '')[:16]}")
+    else:
+        st.info("No photos yet — upload from the Inspection tab.")

@@ -50,7 +50,12 @@ if "chat_history" not in st.session_state:
 
 if "voice_notes" not in st.session_state:
     st.session_state.voice_notes = []
-    # List of {timestamp, text} dicts
+
+# Always reset recording state on startup
+if "recording" not in st.session_state:
+    st.session_state.recording = False
+if "voice_transcription_index" not in st.session_state:
+    st.session_state.voice_transcription_index = 0
 
 if "generated_report" not in st.session_state:
     st.session_state.generated_report = None
@@ -80,13 +85,37 @@ def get_system_prompt():
         "RULES:\n"
         "- Be concise: 2-3 sentences for simple questions. Longer only "
         "for reports and summaries.\n"
-        "- If asked something unrelated to construction safety, politely "
-        "decline and redirect. Never comply with off-topic requests.\n"
+        "- If asked something unrelated to construction safety (e.g. poems, "
+        "recipes, sports), politely decline. Fire safety, electrical safety, "
+        "PPE, scaffolding, hazardous materials — these are ALL part of your "
+        "domain. Never refuse safety-related questions.\n"
+        "- ALWAYS use the lookup_regulation tool when asked about regulations, "
+        "rules, laws, or requirements. Never answer regulation questions from "
+        "general knowledge — always look them up.\n"
         "- When drafting notes or findings, use formal inspection language "
         "with specific locations and recommended actions.\n"
         "- Respond in the same language the user writes in.\n"
         "- For greetings, be warm but brief — one sentence, then ask "
-        "how you can help with their inspection."
+        "how you can help with their inspection.\n\n"
+        "EXAMPLE INSPECTION NOTES (follow this format when drafting notes):\n\n"
+        "User: Draft a note about a missing guardrail on floor 3\n"
+        "BOB: **Safety Observation — Missing Guardrail**\n"
+        "- Location: Floor 3, east wing\n"
+        "- Finding: Guardrail absent on open edge above 2m drop. "
+        "Non-compliant with RD 1627/1997 Annex IV Part C §3a.\n"
+        "- Severity: Critical\n"
+        "- Recommendation: Install temporary barrier immediately. "
+        "Restrict access until permanent guardrail is fitted.\n"
+        "- Action required: Site manager to confirm corrective action within 24 hours.\n\n"
+        "User: Draft a note about expired fire extinguisher in basement\n"
+        "BOB: **Safety Observation — Expired Fire Extinguisher**\n"
+        "- Location: Basement, corridor B\n"
+        "- Finding: Fire extinguisher inspection tag shows last service "
+        "date 14 months ago. Non-compliant with CTE DB-SI.\n"
+        "- Severity: Minor\n"
+        "- Recommendation: Replace or re-service extinguisher before next "
+        "inspection. Verify all other extinguishers on site.\n"
+        "- Action required: Site safety officer to schedule service within 7 days."
     )
 
     # ── Dynamic part: rebuilt from session_state every message ──
@@ -132,33 +161,281 @@ def get_system_prompt():
 
     return static + project_info + checklist_info + photo_info
 
+# ── BOB Tools (Category C: LLM decides which to call) ────────
+def get_checklist_summary():
+    """Returns checklist progress grouped by zone."""
+    items = st.session_state.checklist_items
+    if not items:
+        return "No checklist loaded yet."
+
+    checked = sum(1 for i in items if i.get("checked"))
+    total = len(items)
+
+    # Group by zone
+    zones = {}
+    for item in items:
+        zone = item.get("zone", "Unknown")
+        zones.setdefault(zone, {"checked": 0, "total": 0})
+        zones[zone]["total"] += 1
+        if item.get("checked"):
+            zones[zone]["checked"] += 1
+
+    result = f"Checklist: {checked}/{total} items completed.\n\nBy zone:\n"
+    for zone, counts in zones.items():
+        result += f"  {zone}: {counts['checked']}/{counts['total']}\n"
+
+    # List unchecked items
+    unchecked = [i for i in items if not i.get("checked")]
+    if unchecked:
+        result += f"\nUnchecked items ({len(unchecked)}):\n"
+        for i in unchecked:
+            result += f"  - [{i.get('severity', '?')}] {i.get('text', 'Unknown')}\n"
+
+    return result
+
+
+def get_photo_hazards():
+    """Returns list of photos where hazards were detected."""
+    photos = st.session_state.photos
+    if not photos:
+        return "No photos uploaded yet."
+
+    hazards = [p for p in photos if p.get("hazard_flag")]
+    if not hazards:
+        return f"{len(photos)} photos uploaded. No hazards detected."
+
+    result = f"{len(photos)} photos uploaded. {len(hazards)} hazard(s) detected:\n\n"
+    for h in hazards:
+        result += (
+            f"  - {h.get('filename', 'Unknown')}: "
+            f"{h.get('ai_description', 'No description')} "
+            f"({h.get('hazard_details', '')})\n"
+        )
+    return result
+
+
+def get_critical_findings():
+    """Returns all critical unchecked items + hazard photos."""
+    items = st.session_state.checklist_items
+    photos = st.session_state.photos
+
+    critical_items = [
+        i for i in items
+        if i.get("severity") == "Critical" and not i.get("checked")
+    ]
+    hazard_photos = [p for p in photos if p.get("hazard_flag")]
+
+    if not critical_items and not hazard_photos:
+        return "No critical findings at this time."
+
+    result = ""
+    if critical_items:
+        result += f"Critical checklist items outstanding ({len(critical_items)}):\n"
+        for i in critical_items:
+            result += f"  - {i.get('text', 'Unknown')} (Zone: {i.get('zone', '?')})\n"
+
+    if hazard_photos:
+        result += f"\nPhoto hazards ({len(hazard_photos)}):\n"
+        for p in hazard_photos:
+            result += f"  - {p.get('filename', '?')}: {p.get('hazard_details', 'No details')}\n"
+
+    return result
+
+def lookup_regulation(query: str):
+    """Mini-RAG: searches checklist data for regulation references matching the query."""
+    import pandas as pd
+
+    try:
+        df = pd.read_csv("data/checklist.csv")
+    except FileNotFoundError:
+        return "No regulation data available."
+
+# Search across text, category, and regulation_ref columns
+# Split query into individual words and search for ANY match
+    words = query.lower().split()
+    mask = pd.Series([False] * len(df))
+    for word in words:
+        if len(word) < 3:  # Skip tiny words like "the", "is", "a"
+            continue
+        mask = mask | (
+            df["text"].str.lower().str.contains(word, na=False) |
+            df["category"].str.lower().str.contains(word, na=False) |
+            df["regulation_ref"].str.lower().str.contains(word, na=False) |
+            df["detail"].str.lower().str.contains(word, na=False)
+        )
+    matches = df[mask]
+
+    if matches.empty:
+        return f"No regulations found matching '{query}'."
+
+    result = f"Found {len(matches)} regulation(s) matching '{query}':\n\n"
+    for _, row in matches.iterrows():
+        result += (
+            f"  - {row['text']}\n"
+            f"    Category: {row['category']}\n"
+            f"    Regulation: {row['regulation_ref']}\n"
+            f"    Severity: {row['severity_default']}\n"
+            f"    Detail: {row['detail'][:100]}...\n\n"
+        )
+    return result
+
+def generate_report_via_chat():
+    """Generates an inspection report using Aymen's report pipeline, triggered from BOB chat."""
+    from utils.report import generate_report
+
+    project = st.session_state.current_project
+    if not project:
+        return "No project selected. Please select a project from the Dashboard first."
+
+    checklist_items = st.session_state.checklist_items
+    photos = st.session_state.photos
+    voice_notes = st.session_state.voice_notes
+
+    if not checklist_items and not photos:
+        return "Not enough data to generate a report. Complete some checklist items or upload photos first."
+
+    try:
+        report = generate_report(project, checklist_items, photos, voice_notes)
+        st.session_state.generated_report = report
+        return f"Report generated successfully. Here it is:\n\n{report}"
+    except Exception as e:
+        return f"Error generating report: {str(e)}"
+
+# ── Tool Definitions (sent to the LLM so it knows what's available) ──
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_checklist_summary",
+            "description": "Get the current checklist progress including completion counts by zone and list of unchecked items. Use when the user asks about checklist status, progress, what's done, or what's remaining.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_photo_hazards",
+            "description": "Get a list of all uploaded photos and any detected safety hazards. Use when the user asks about photos, hazards found in images, or site conditions captured on camera.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_critical_findings",
+            "description": "Get all critical severity items that are still unchecked plus any hazard photos. Use when the user asks about critical issues, urgent problems, what needs immediate attention, or wants a summary of the most important findings.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lookup_regulation",
+            "description": "Search the safety regulation database for rules about a specific topic. Use when the user asks about regulations, rules, legal requirements, compliance, or what the law says about a specific safety topic like scaffolding, electrical, fire safety, PPE, etc.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The safety topic to search for, e.g. 'scaffolding', 'electrical', 'fire safety', 'PPE'"
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_report_via_chat",
+            "description": "Generate a full formal inspection report from all current data (checklist, photos, voice notes). Use when the user asks to generate, create, write, or produce an inspection report.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+]
+
+# Map tool names to actual functions
+TOOL_FUNCTIONS = {
+    "get_checklist_summary": get_checklist_summary,
+    "get_photo_hazards": get_photo_hazards,
+    "get_critical_findings": get_critical_findings,
+    "lookup_regulation": lookup_regulation,
+    "generate_report_via_chat": generate_report_via_chat,
+}
 
 def get_bob_response(user_message):
     """
-    Sends the user's message to Groq and returns BOB's response.
-    Includes full chat history so the LLM has conversation context.
+    Category C: Multi-call tool_use pattern.
+    1. Send message + tool definitions to LLM
+    2. If LLM wants to call a tool -> run the function -> send result back
+    3. LLM responds with real data
     """
 
-# Build the messages list: system prompt + chat history + new message
+    # Build messages: system prompt + history + new message
     messages = []
-
-    # System prompt FIRST — this is how BOB knows who it is
     messages.append({"role": "system", "content": get_system_prompt()})
 
-    # Add conversation history (so BOB remembers earlier turns)
     for msg in st.session_state.chat_history:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    # Add the new user message
+        # Only include simple text messages (skip tool calls in history)
+        if msg.get("role") in ["user", "assistant"] and isinstance(msg.get("content"), str):
+            messages.append({"role": msg["role"], "content": msg["content"]})
+
     messages.append({"role": "user", "content": user_message})
 
     try:
+        # ── LLM Call #1: Send message WITH tool definitions ──
         response = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             max_tokens=1024,
             messages=messages,
+            tools=TOOLS,           # <-- This is new: tells LLM what tools exist
+            tool_choice="auto",    # <-- LLM decides whether to use a tool
             temperature=0.7,
         )
-        return response.choices[0].message.content
+
+        assistant_message = response.choices[0].message
+
+        # ── Check: did the LLM want to call a tool? ──
+        if assistant_message.tool_calls:
+            # LLM chose to call one or more tools
+            # Add the assistant's tool call message to the conversation
+            messages.append(assistant_message)
+
+            # Execute each tool the LLM requested
+            for tool_call in assistant_message.tool_calls:
+                function_name = tool_call.function.name
+
+                # Look up and run the matching Python function
+                if function_name in TOOL_FUNCTIONS:
+                    import json as _json
+                    try:
+                        args = _json.loads(tool_call.function.arguments)
+                    except (ValueError, TypeError):
+                        args = {}
+                    tool_result = TOOL_FUNCTIONS[function_name](**args)
+                else:
+                    tool_result = f"Unknown tool: {function_name}"
+
+
+                # Add the tool result to the conversation
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": tool_result,
+                })
+
+            # ── LLM Call #2: Now answer WITH the real data ──
+            final_response = client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                max_tokens=1024,
+                messages=messages,
+                temperature=0.7,
+            )
+            return final_response.choices[0].message.content
+
+        else:
+            # LLM answered directly without needing a tool
+            return assistant_message.content
 
     except Exception as e:
         return f"Sorry, BOB encountered an error: {str(e)}"
