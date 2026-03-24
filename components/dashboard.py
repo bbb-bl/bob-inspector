@@ -29,8 +29,9 @@ def load_sample_inspection():
         try:
             with open(data_path, "r", encoding="utf-8") as f:
                 sample = json.load(f)
-            if not st.session_state.get("checklist_items"):
-                st.session_state.checklist_items = sample.get("checklist_items", [])
+            # Always load sample checklist — inspection.py loads from CSV first (Tab 1),
+            # which would otherwise block the sample data from ever appearing.
+            st.session_state.checklist_items = sample.get("checklist_items", [])
             if not st.session_state.get("photos"):
                 st.session_state.photos = sample.get("photos", [])
             if not st.session_state.get("voice_notes"):
@@ -49,8 +50,9 @@ STATUS_COLORS = {
 
 
 def render_report_section():
-    """Day 3 & 4 — Report generation and download."""
+    """Day 3, 4 & 5 — Report generation, markdown download, and PDF download."""
     from utils.report import generate_report
+    from utils.report_pdf import build_pdf
 
     st.divider()
     st.markdown("### 📄 Generate Inspection Report")
@@ -91,12 +93,25 @@ def render_report_section():
         st.session_state.generated_report = edited_report
 
         project_name = project.get("name", "inspection").replace(" ", "_")
-        st.download_button(
-            label="⬇️ Download report (.md)",
-            data=st.session_state.generated_report,
-            file_name=f"inspection_{project_name}.md",
-            mime="text/markdown",
-        )
+
+        dl_col1, dl_col2 = st.columns(2)
+
+        with dl_col1:
+            st.download_button(
+                label="⬇️ Download PDF",
+                data=build_pdf(st.session_state.generated_report, project),
+                file_name=f"inspection_{project_name}.pdf",
+                mime="application/pdf",
+                type="primary",
+            )
+
+        with dl_col2:
+            st.download_button(
+                label="⬇️ Download Markdown",
+                data=st.session_state.generated_report,
+                file_name=f"inspection_{project_name}.md",
+                mime="text/markdown",
+            )
 
 
 def render_dashboard():
@@ -109,9 +124,12 @@ def render_dashboard():
     st.markdown("## 📊 Project Overview")
 
     total_projects = len(projects)
-    total_open = sum(p.get("open_findings", 0) for p in projects)
-    total_critical = sum(p.get("critical_findings", 0) for p in projects)
     total_inspections = sum(p.get("total_inspections", 0) for p in projects)
+
+    # Compute live from session_state so metrics update as the inspector works
+    live_items = st.session_state.get("checklist_items", [])
+    total_open = sum(1 for i in live_items if not i.get("checked"))
+    total_critical = sum(1 for i in live_items if not i.get("checked") and i.get("severity") == "Critical")
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Projects", total_projects)

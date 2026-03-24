@@ -57,6 +57,10 @@ if "recording" not in st.session_state:
 if "voice_transcription_index" not in st.session_state:
     st.session_state.voice_transcription_index = 0
 
+if "generated_report" not in st.session_state:
+    st.session_state.generated_report = None
+    # str — AI-generated report text, set by Aymen's dashboard render_report_section()
+
 # ── BOB Chat Logic ───────────────────────────────────────────
 from openai import OpenAI
 
