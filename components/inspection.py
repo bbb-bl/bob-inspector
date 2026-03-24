@@ -196,12 +196,21 @@ def render():
     st.divider()
     st.subheader("📋 Safety Checklist")
 
-    # Building type selector
-    building_type = st.selectbox(
-        "Building type",
-        ["Commercial", "Residential", "Educational"],
-        key="building_type_select"
-    )
+   # Auto-select building type from current project
+    project_building_type = None
+    if st.session_state.current_project:
+        project_building_type = st.session_state.current_project.get("building_type")
+
+    valid_types = ["Commercial", "Residential", "Educational"]
+    if project_building_type in valid_types:
+        building_type = project_building_type
+        st.caption(f"📋 Checklist type auto-set to **{building_type}** based on selected project.")
+    else:
+        building_type = st.selectbox(
+            "Building type",
+            valid_types,
+            key="building_type_select"
+        )
 
     # Load checklist when building type changes or checklist is empty
     if (
@@ -214,7 +223,13 @@ def render():
         )
         st.session_state["last_building_type"] = building_type
 
-    items = st.session_state.checklist_items
+    # Sort by severity: Critical first, then Minor, then Recommendation
+    # Within each severity, checked items go to the bottom
+    severity_order = {"Critical": 0, "Minor": 1, "Recommendation": 2}
+    items = sorted(
+        st.session_state.checklist_items,
+        key=lambda i: (i.get("checked", False), severity_order.get(i.get("severity", "Recommendation"), 2))
+    )
 
     # Progress bar
     checked_count = sum(1 for i in items if i["checked"])
@@ -228,8 +243,6 @@ def render():
 
     st.progress(checked_count / total_count if total_count > 0 else 0)
     st.caption(f"{checked_count} of {total_count} items completed")
-
-    st.divider()
 
     # Group items by zone
     zones = {}
