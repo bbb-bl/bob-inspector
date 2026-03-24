@@ -116,7 +116,7 @@ def render_dashboard():
     if st.session_state.photos:
         f1, f2, f3 = st.columns(3)
         with f1:
-            project_ids = ["All"] + list({p["project_id"] for p in st.session_state.photos})
+            project_ids = ["All"] + list({p.get("project_id", "demo") for p in st.session_state.photos})
             selected_project = st.selectbox("Project", project_ids)
         with f2:
             hazards_only = st.checkbox("⚠️ Hazards only")
