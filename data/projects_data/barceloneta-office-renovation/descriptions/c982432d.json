@@ -1,0 +1,10 @@
+{
+  "id": "c982432d",
+  "project_id": "proj-001",
+  "filename": "pexels-tranmautritam-448828.jpg",
+  "timestamp": "2026-03-24T20:57:59.162299",
+  "location": "Barcelona, Spain",
+  "ai_description": "The worker is crouched on the ground, wearing a white hard hat, safety vest, and gloves while working with rebar on a city street. The work area appears to be partially blocked off, but there are no clear safety barriers or cones visible around the worker. The worker's attire and the presence of a hard hat suggest some level of safety protocol is being followed.",
+  "hazard_flag": true,
+  "hazard_details": "The worker appears to be working near live traffic or an active road, as indicated by the road markings and the presence of a utility box and wires nearby. However, there is no visible barricade or safety barrier to protect the worker from passing vehicles, and the worker's position near the road poses a risk of being struck by a vehicle."
+}
