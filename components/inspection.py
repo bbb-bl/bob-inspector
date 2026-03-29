@@ -37,8 +37,147 @@ def render():
     if "recording" not in st.session_state:
         st.session_state.recording = False
 
+     # CHECKLIST
     st.divider()
+    st.subheader("📋 Safety Checklist")
 
+    # Auto-select building type from current project
+    project_building_type = None
+    if st.session_state.current_project:
+        project_building_type = st.session_state.current_project.get("building_type")
+
+    valid_types = ["Commercial", "Residential", "Educational"]
+    if project_building_type in valid_types:
+        building_type = project_building_type
+        st.caption(f"📋 Checklist type auto-set to **{building_type}** based on selected project.")
+    else:
+        building_type = st.selectbox(
+            "Building type",
+            valid_types,
+            key="building_type_select"
+        )
+
+    # Load checklist when building type changes or checklist is empty
+    if (
+        not st.session_state.checklist_items
+        or st.session_state.get("last_building_type") != building_type
+    ):
+        st.session_state.checklist_items = load_checklist_from_csv(
+            "data/checklist.csv",
+            building_type,
+        )
+        st.session_state["last_building_type"] = building_type
+
+    # Sort by severity: Critical first, then Minor, then Recommendation
+    # Within each severity, checked items go to the bottom
+    severity_order = {"Critical": 0, "Minor": 1, "Recommendation": 2}
+    items = sorted(
+        st.session_state.checklist_items,
+        key=lambda i: (i.get("checked", False), severity_order.get(i.get("severity", "Recommendation"), 2))
+    )
+
+    # Progress bar
+    checked_count = sum(1 for i in items if i.get("checked"))
+    total_count = len(items)
+    critical_outstanding = [
+        i for i in items if i.get("severity") == "Critical" and not i.get("checked")
+    ]
+
+    if critical_outstanding:
+        st.error(f"⚠ {len(critical_outstanding)} critical item(s) outstanding")
+
+    st.progress(checked_count / total_count if total_count > 0 else 0)
+    st.caption(f"{checked_count} of {total_count} items completed")
+
+    # Group items by zone (safe against missing zone keys)
+    zones = {}
+    for item in items:
+        zone = item.get("zone", "General")
+        zones.setdefault(zone, []).append(item)
+
+    # Render each zone as an expander
+    for zone, zone_items in zones.items():
+        zone_checked = sum(1 for i in zone_items if i.get("checked"))
+        is_open = st.session_state.get("open_zone") == zone
+        with st.expander(
+            f"{zone} ({zone_checked}/{len(zone_items)} done)", expanded=is_open
+        ):
+            for item in zone_items:
+                # Severity badge
+                sev = item.get("severity", "Rec")
+                if sev == "Critical":
+                    badge = '<span style="background:#FF4444;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Critical</span>'
+                elif sev == "Minor":
+                    badge = '<span style="background:#E8940A;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Minor</span>'
+                else:
+                    badge = '<span style="background:#2855C8;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Rec</span>'
+
+                col1, col2 = st.columns([0.85, 0.15])
+
+                with col1:
+                    checked = st.checkbox(
+                        item["text"],
+                        value=item.get("checked", False),
+                        key=f"chk_{item['id']}",
+                    )
+
+                    if checked != item.get("checked", False):
+                        item["checked"] = checked
+                        st.session_state["open_zone"] = zone
+                        st.rerun()
+
+                with col2:
+                    st.markdown(badge, unsafe_allow_html=True)
+
+                # Detail tooltip and notes field when checked
+                if item.get("detail"):
+                    st.caption(f"ℹ {item['detail']}")
+
+                if item.get("checked", False):
+                    notes = st.text_input(
+                        "Notes",
+                        value=item.get("notes", ""),
+                        key=f"notes_{item['id']}",
+                        placeholder="Add observation...",
+                    )
+
+                    if notes != item.get("notes", ""):
+                        item["notes"] = notes
+                        item["severity"] = (
+                            classify_severity(notes) if notes else item.get("severity", "Rec")
+                        )
+
+    # Custom item input
+    st.markdown("**Add custom item**")
+    col_input, col_btn = st.columns([0.8, 0.2])
+    with col_input:
+        custom_text = st.text_input(
+            "Custom item",
+            key="custom_item_input",
+            label_visibility="collapsed",
+            placeholder="Describe the issue...",
+        )
+
+    with col_btn:
+        if st.button("Add", key="add_custom_btn"):
+            if custom_text.strip():
+                new_item = {
+                    "id": f"CUSTOM-{str(uuid.uuid4())[:6]}",
+                    "text": custom_text.strip(),
+                    "detail": "",
+                    "zone": "Custom",
+                    "building_type": "All",
+                    "category": "Custom",
+                    "regulation_ref": "",
+                    "checked": False,
+                    "notes": "",
+                    "severity": classify_severity(custom_text.strip()),
+                }
+
+                st.session_state.checklist_items.append(new_item)
+                st.rerun()
+
+    st.divider()
     # Photo upload
     st.subheader("📸 Upload Site Photos")
     uploaded_files = st.file_uploader(
@@ -118,8 +257,6 @@ def render():
                     st.caption(f"🤖 {photo['ai_description']}")
                 if photo.get("hazard_details"):
                     st.warning(f"⚠ {photo['hazard_details']}")
-
-    st.divider()
 
     # AI Analysis button
     if st.button("🤖 Analyse photos with AI", key="analyse_btn"):
@@ -232,147 +369,3 @@ def render():
                             st.session_state.checklist_items.append(new_item)
                             st.session_state.added_to_checklist.add(i)
                             st.rerun()
-
-    # CHECKLIST
-    st.divider()
-    st.subheader("📋 Safety Checklist")
-
-    # Auto-select building type from current project
-    project_building_type = None
-    if st.session_state.current_project:
-        project_building_type = st.session_state.current_project.get("building_type")
-
-    valid_types = ["Commercial", "Residential", "Educational"]
-    if project_building_type in valid_types:
-        building_type = project_building_type
-        st.caption(f"📋 Checklist type auto-set to **{building_type}** based on selected project.")
-    else:
-        building_type = st.selectbox(
-            "Building type",
-            valid_types,
-            key="building_type_select"
-        )
-
-    # Load checklist when building type changes or checklist is empty
-    if (
-        not st.session_state.checklist_items
-        or st.session_state.get("last_building_type") != building_type
-    ):
-        st.session_state.checklist_items = load_checklist_from_csv(
-            "data/checklist.csv",
-            building_type,
-        )
-        st.session_state["last_building_type"] = building_type
-
-    # Sort by severity: Critical first, then Minor, then Recommendation
-    # Within each severity, checked items go to the bottom
-    severity_order = {"Critical": 0, "Minor": 1, "Recommendation": 2}
-    items = sorted(
-        st.session_state.checklist_items,
-        key=lambda i: (i.get("checked", False), severity_order.get(i.get("severity", "Recommendation"), 2))
-    )
-
-    # Progress bar
-    checked_count = sum(1 for i in items if i.get("checked"))
-    total_count = len(items)
-    critical_outstanding = [
-        i for i in items if i.get("severity") == "Critical" and not i.get("checked")
-    ]
-
-    if critical_outstanding:
-        st.error(f"⚠ {len(critical_outstanding)} critical item(s) outstanding")
-
-    st.progress(checked_count / total_count if total_count > 0 else 0)
-    st.caption(f"{checked_count} of {total_count} items completed")
-
-    st.divider()
-
-    # Group items by zone (safe against missing zone keys)
-    zones = {}
-    for item in items:
-        zone = item.get("zone", "General")
-        zones.setdefault(zone, []).append(item)
-
-    # Render each zone as an expander
-    for zone, zone_items in zones.items():
-        zone_checked = sum(1 for i in zone_items if i.get("checked"))
-        is_open = st.session_state.get("open_zone") == zone
-        with st.expander(
-            f"{zone} ({zone_checked}/{len(zone_items)} done)", expanded=is_open
-        ):
-            for item in zone_items:
-                # Severity badge
-                sev = item.get("severity", "Rec")
-                if sev == "Critical":
-                    badge = '<span style="background:#FF4444;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Critical</span>'
-                elif sev == "Minor":
-                    badge = '<span style="background:#E8940A;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Minor</span>'
-                else:
-                    badge = '<span style="background:#2855C8;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Rec</span>'
-
-                col1, col2 = st.columns([0.85, 0.15])
-
-                with col1:
-                    checked = st.checkbox(
-                        item["text"],
-                        value=item.get("checked", False),
-                        key=f"chk_{item['id']}",
-                    )
-
-                    if checked != item.get("checked", False):
-                        item["checked"] = checked
-                        st.session_state["open_zone"] = zone
-                        st.rerun()
-
-                with col2:
-                    st.markdown(badge, unsafe_allow_html=True)
-
-                # Detail tooltip and notes field when checked
-                if item.get("detail"):
-                    st.caption(f"ℹ {item['detail']}")
-
-                if item.get("checked", False):
-                    notes = st.text_input(
-                        "Notes",
-                        value=item.get("notes", ""),
-                        key=f"notes_{item['id']}",
-                        placeholder="Add observation...",
-                    )
-
-                    if notes != item.get("notes", ""):
-                        item["notes"] = notes
-                        item["severity"] = (
-                            classify_severity(notes) if notes else item.get("severity", "Rec")
-                        )
-
-    # Custom item input
-    st.divider()
-    st.markdown("**Add custom item**")
-    col_input, col_btn = st.columns([0.8, 0.2])
-    with col_input:
-        custom_text = st.text_input(
-            "Custom item",
-            key="custom_item_input",
-            label_visibility="collapsed",
-            placeholder="Describe the issue...",
-        )
-
-    with col_btn:
-        if st.button("Add", key="add_custom_btn"):
-            if custom_text.strip():
-                new_item = {
-                    "id": f"CUSTOM-{str(uuid.uuid4())[:6]}",
-                    "text": custom_text.strip(),
-                    "detail": "",
-                    "zone": "Custom",
-                    "building_type": "All",
-                    "category": "Custom",
-                    "regulation_ref": "",
-                    "checked": False,
-                    "notes": "",
-                    "severity": classify_severity(custom_text.strip()),
-                }
-
-                st.session_state.checklist_items.append(new_item)
-                st.rerun()
-

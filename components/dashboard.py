@@ -7,6 +7,7 @@ Aymen — Day 4: Download button
 
 import json
 import os
+import uuid
 import streamlit as st
 
 
@@ -140,10 +141,40 @@ def render_dashboard():
     st.divider()
 
     st.markdown("### Projects")
+    # Add new project form
+    with st.expander("➕ Add new project"):
+        with st.form("new_project_form"):
+            name = st.text_input("Project name *")
+            address = st.text_input("Address *")
+            building_type = st.selectbox("Building type *", ["Commercial", "Residential", "Educational"])
+            inspector = st.text_input("Inspector name *")
+            status = st.selectbox("Status *", ["In progress", "Pending review", "Complete"])
 
-    if not projects:
-        st.info("No projects loaded. Check that data/projects.json exists.")
-        return
+            submitted = st.form_submit_button("Create project")
+            if submitted:
+                if name and address and inspector:
+                    new_project = {
+                        "id": f"proj-{str(uuid.uuid4())[:6]}",
+                        "name": name,
+                        "address": address,
+                        "building_type": building_type,
+                        "status": status,
+                        "inspector": inspector,
+                        "last_inspection": "Not yet inspected",
+                        "total_inspections": 0,
+                        "open_findings": 0,
+                        "critical_findings": 0,
+                        "notes": ""
+                    }
+                    st.session_state.projects.append(new_project)
+                    st.success(f"✅ Project '{name}' created!")
+                    st.rerun()
+                else:
+                    st.error("Please fill in all required fields.")
+
+        if not projects:
+            st.info("No projects loaded. Check that data/projects.json exists.")
+            return
 
     for project in projects:
         status_icon = STATUS_COLORS.get(project.get("status", ""), "⚪")
@@ -175,7 +206,21 @@ def render_dashboard():
 
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
-
+    # Show checklist progress for this project
+    if st.session_state.current_project and st.session_state.current_project.get("id") == project["id"]:
+        items = st.session_state.checklist_items
+        if items:
+            checked = sum(1 for i in items if i.get("checked"))
+            total = len(items)
+            critical = sum(1 for i in items if i.get("severity") == "Critical" and not i.get("checked"))
+            st.progress(checked / total if total > 0 else 0)
+            st.caption(f"✅ {checked}/{total} items completed")
+            if critical > 0:
+                st.error(f"⚠ {critical} critical item(s) outstanding")
+            else:
+                st.success("No critical items outstanding")
+        else:
+            st.caption("No checklist started yet")
     render_report_section()
 
     # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────
