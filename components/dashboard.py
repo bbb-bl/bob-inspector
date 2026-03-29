@@ -228,10 +228,13 @@ def render_dashboard():
     st.subheader(f"📸 Photo Gallery ({len(st.session_state.photos)} photos)")
 
     if st.session_state.photos:
+        # Build lookup: project_id -> project name
+        id_to_name = {p["id"]: p["name"] for p in st.session_state.get("projects", [])}
+
         f1, f2, f3 = st.columns(3)
         with f1:
-            project_ids = ["All"] + list({p.get("project_id", "demo") for p in st.session_state.photos})
-            selected_project = st.selectbox("Project", project_ids)
+            project_names = ["All"] + list({id_to_name.get(p.get("project_id", ""), p.get("project_id", "N/A")) for p in st.session_state.photos})
+            selected_project = st.selectbox("Project", project_names)
         with f2:
             hazards_only = st.checkbox("⚠️ Hazards only")
         with f3:
@@ -239,7 +242,7 @@ def render_dashboard():
 
         filtered = st.session_state.photos
         if selected_project != "All":
-            filtered = [p for p in filtered if p.get("project_id", "N/A") == selected_project]
+            filtered = [p for p in filtered if id_to_name.get(p.get("project_id", ""), p.get("project_id", "N/A")) == selected_project]
         if hazards_only:
             filtered = [p for p in filtered if p["hazard_flag"]]
         if search_query:
@@ -260,7 +263,8 @@ def render_dashboard():
                         if photo["hazard_flag"]:
                             st.error(f"⚠️ {photo.get('hazard_details', '')}")
                         st.markdown(f"**Description:** {photo.get('ai_description', '_Not yet analysed_')}")
-                        st.caption(f"🗂 Project: `{photo.get('project_id', 'N/A')}`")
+                        _pname = id_to_name.get(photo.get("project_id", ""), photo.get("project_id", "N/A"))
+                        st.caption(f"🗂 Project: `{_pname}`")
                         st.caption(f"📍 {photo.get('location', 'N/A')}  |  🕐 {photo.get('timestamp', '')[:16]}")
     else:
         st.info("No photos yet — upload from the Inspection tab.")

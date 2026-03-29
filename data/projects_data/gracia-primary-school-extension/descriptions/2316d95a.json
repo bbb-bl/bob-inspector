@@ -1,0 +1,10 @@
+{
+  "id": "2316d95a",
+  "project_id": "proj-003",
+  "filename": "pexels-davidelocatelli-2383649.jpg",
+  "timestamp": "2026-03-24T21:03:12.642297",
+  "location": "Barcelona, Spain",
+  "ai_description": "The construction site appears to have multiple workers wearing personal protective equipment such as hard hats and high-visibility vests. The site has various construction materials and equipment scattered around, with some areas appearing to be secured and others looking more exposed. There are also visible safety barriers and tape.",
+  "hazard_flag": true,
+  "hazard_details": "There is a visible safety hazard posed by the exposed rebar and open areas without proper guardrails or fall protection. Workers are also standing near an opening without visible fall protection. Additionally, the presence of a portable toilet close to the work area may pose a tripping hazard if not properly secured."
+}

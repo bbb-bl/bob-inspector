@@ -1,0 +1,16 @@
+photo_id,filename,manual_hazard_label,hazard_type,notes
+1,4_Ways_to_Improve_Construction_Site_Safety.jpeg,False,,Workers with full PPE, scaffolding with guardrails
+2,Boshard-On-Site-Greenpoint-11-1.jpg,False,,Workers with harness and full PPE on scaffolding
+3,common-construction-site-hazards.jpg,True,struck by,Workers too close to active excavator arm
+4,Constru-site.jpg,False,,Full PPE, organised site
+5,construction-site-management-1.jpg,True,fall risk,Workers at height on open edge without guardrail
+6,construction-site.jpg,False,,Workers with harness visible at height
+7,Construction.jpeg,False,,Full PPE and harness in industrial setting
+8,Depositphotos_7944862_s-2019.jpg,True,fall risk,Workers on elevated slab with no edge protection
+9,MicrosoftTeams-image-35-scaled.jpg,False,,Harness clearly visible on workers
+10,pexels-brett-sayles-4276427.jpg,False,,Scaffolding with guardrails PPE present
+11,pexels-davidelocatelli-2383649.jpg,True,fall risk,Exposed rebar open edges at height
+12,pexels-mali-69483.jpg,True,excavation,Unguarded excavation loose hose on ground
+13,pexels-pixabay-7931.jpg,True,fall risk,Multi-storey open building with no edge protection
+14,pexels-pixabay-159358.jpg,True,fall risk,Exposed rebar throughout open edges without guardrails
+15,pexels-tranmautritam-448828.jpg,False,,Full PPE with road barriers in place

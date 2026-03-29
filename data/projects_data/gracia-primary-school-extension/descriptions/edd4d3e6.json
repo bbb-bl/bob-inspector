@@ -1,0 +1,10 @@
+{
+  "id": "edd4d3e6",
+  "project_id": "proj-003",
+  "filename": "pexels-mali-69483.jpg",
+  "timestamp": "2026-03-24T21:03:12.748018",
+  "location": "Barcelona, Spain",
+  "ai_description": "The construction site appears to have an excavated area with heavy machinery, including two excavators, and various construction materials. The site is partially enclosed by walls and a fence with a black tarp, but there are no visible safety barriers or warning signs around the excavated area. A yellow hose is visible on the ground.",
+  "hazard_flag": true,
+  "hazard_details": "There is a visible safety hazard due to the lack of safety barriers or warning signs around the excavated area, which could pose a risk to workers and pedestrians. Additionally, the presence of heavy machinery and construction materials requires proper safety protocols to be in place."
+}

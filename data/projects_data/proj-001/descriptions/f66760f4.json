@@ -1,0 +1,10 @@
+{
+  "id": "f66760f4",
+  "project_id": "proj-001",
+  "filename": "pexels-pixabay-7931.jpg",
+  "timestamp": "2026-03-24T20:27:21.263166",
+  "location": "Barcelona, Spain",
+  "ai_description": "The photo shows a multi-level concrete building under construction with exposed rebar and wooden framing. The structure has metal and yellow support columns holding up the floors, and there are no visible workers or personal protective equipment (PPE) in the image. The floors have a railing made of wooden planks on metal posts, but it appears incomplete.",
+  "hazard_flag": true,
+  "hazard_details": "A visible safety hazard is the incomplete railing on the floors, which could pose a fall risk to workers. Additionally, the presence of exposed areas with no railing or fall protection is a significant concern."
+}
