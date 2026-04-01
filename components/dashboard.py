@@ -1,7 +1,7 @@
 """
 components/dashboard.py
 Aymen — Day 2: Dashboard tab
-Aymen — Day 3: Report generation
+Aymen — Day 3: Report generation  
 Aymen — Day 4: Download button
 Aymen — Day 5: PDF export + charts + professional UI
 """
@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import streamlit as st
 
+# Color palette
 PINK  = "#C02050"
 DARK  = "#1A1A2E"
 BLUE  = "#2855C8"
@@ -91,10 +92,11 @@ def _donut_chart(checked, total):
 
 
 def _severity_bar(items):
-    sevs   = ["Critical", "High", "Minor", "Recommendation"]
+    sevs = ["Critical", "High", "Minor", "Recommendation"]
     colors = {"Critical": RED, "High": AMBER, "Minor": GREY, "Recommendation": GREEN}
     done = {s: 0 for s in sevs}
     todo = {s: 0 for s in sevs}
+    
     for item in items:
         s = item.get("severity", "Recommendation")
         if s not in sevs:
@@ -103,15 +105,18 @@ def _severity_bar(items):
             done[s] += 1
         else:
             todo[s] += 1
+    
     active = [s for s in sevs if done[s] + todo[s] > 0]
     if not active:
         return
+    
     fig, ax = plt.subplots(figsize=(4.5, max(1.8, len(active) * 0.65)), facecolor="none")
     for i, s in enumerate(active):
         total_s = done[s] + todo[s]
         ax.barh(i, total_s, color="#F0E0E8", height=0.5)
         ax.barh(i, done[s], color=colors[s], height=0.5)
         ax.text(total_s + 0.05, i, f"{done[s]}/{total_s}", va="center", fontsize=8, color=DARK)
+    
     ax.set_yticks(range(len(active)))
     ax.set_yticklabels(active, fontsize=9, color=DARK)
     ax.set_xlim(0, max(done[s] + todo[s] for s in active) + 1.8)
@@ -133,16 +138,21 @@ def _zone_heatmap(items):
         zones[z]["total"] += 1
         if item.get("checked"):
             zones[z]["done"] += 1
+    
     if not zones:
         return
+    
     labels = list(zones.keys())
-    pcts   = [zones[z]["done"] / zones[z]["total"] * 100 for z in labels]
+    pcts = [zones[z]["done"] / zones[z]["total"] * 100 for z in labels]
     bcolors = [RED if p < 40 else AMBER if p < 70 else GREEN for p in pcts]
+    
     fig, ax = plt.subplots(figsize=(4.5, max(1.5, len(labels) * 0.55)), facecolor="none")
     bars = ax.barh(labels, pcts, color=bcolors, height=0.5)
+    
     for bar, pct in zip(bars, pcts):
         ax.text(min(pct + 1, 96), bar.get_y() + bar.get_height() / 2,
                 f"{pct:.0f}%", va="center", fontsize=8, color=DARK)
+    
     ax.set_xlim(0, 115)
     ax.set_xlabel("% Complete", fontsize=8, color=GREY)
     for spine in ["top", "right", "left"]:
@@ -150,6 +160,7 @@ def _zone_heatmap(items):
     ax.tick_params(left=False, colors=GREY)
     ax.set_facecolor("none")
     fig.patch.set_alpha(0)
+    
     legend = [mpatches.Patch(color=RED, label="<40%"),
               mpatches.Patch(color=AMBER, label="40-70%"),
               mpatches.Patch(color=GREEN, label=">70%")]
@@ -164,6 +175,7 @@ def _hazard_pie(photos):
     safe = len(photos) - hazards
     if not photos:
         return
+    
     fig, ax = plt.subplots(figsize=(2.8, 2.8), facecolor="none")
     ax.pie([hazards, safe], colors=[RED, GREEN], startangle=90,
            labels=[f"Hazard\n{hazards}", f"Safe\n{safe}"],
@@ -179,15 +191,19 @@ def _hazard_pie(photos):
 def render_analytics(items, photos):
     if not items and not photos:
         return
+    
     st.markdown('<div class="section-header">📊 Live Analytics</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1.1, 2, 2])
+    
     with c1:
         st.caption("**Completion**")
         checked = sum(1 for i in items if i.get("checked"))
         _donut_chart(checked, len(items))
+    
     with c2:
         st.caption("**By severity**")
         _severity_bar(items)
+    
     with c3:
         st.caption("**By zone**")
         _zone_heatmap(items)
@@ -237,21 +253,24 @@ def load_sample_inspection():
 
 
 STATUS_COLORS = {"In progress": "🔵", "Pending review": "🟡", "Complete": "🟢", "On hold": "🔴"}
-STATUS_BADGE  = {"In progress": "badge-progress", "Pending review": "badge-pending",
-                 "Complete": "badge-complete"}
+STATUS_BADGE = {"In progress": "badge-progress", "Pending review": "badge-pending",
+                "Complete": "badge-complete", "On hold": "badge-critical"}
 
 
 def render_report_section():
-    from utils.report import generate_report
-    from utils.report_pdf import build_pdf
+    try:
+        from utils.report import generate_report
+        from utils.report_pdf import build_pdf
+    except ImportError as e:
+        st.error(f"Report modules not found: {e}")
+        return
 
-    st.markdown('<div class="section-header">📄 Generate Inspection Report</div>',
-                unsafe_allow_html=True)
+    st.markdown('<div class="section-header">📄 Generate Inspection Report</div>', unsafe_allow_html=True)
 
-    project         = st.session_state.get("current_project")
+    project = st.session_state.get("current_project")
     checklist_items = st.session_state.get("checklist_items", [])
-    photos          = st.session_state.get("photos", [])
-    voice_notes     = st.session_state.get("voice_notes", [])
+    photos = st.session_state.get("photos", [])
+    voice_notes = st.session_state.get("voice_notes", [])
 
     if not project:
         st.info("👆 Select a project above and click 'Start →' first.")
@@ -277,8 +296,9 @@ def render_report_section():
             try:
                 report = generate_report(project, checklist_items, photos, voice_notes)
                 st.session_state.generated_report = report
+                st.success("✅ Report generated successfully!")
             except Exception as e:
-                st.error(f"Error: {str(e)}")
+                st.error(f"Error generating report: {str(e)}")
                 return
 
     if st.session_state.get("generated_report"):
@@ -286,19 +306,26 @@ def render_report_section():
         edited = st.text_area("Report (editable before download)",
                               value=st.session_state.generated_report, height=380)
         st.session_state.generated_report = edited
+        
         project_name = project.get("name", "inspection").replace(" ", "_")
         d1, d2 = st.columns(2)
         with d1:
-            st.download_button("⬇️ Download PDF",
-                               data=build_pdf(st.session_state.generated_report, project),
-                               file_name=f"inspection_{project_name}.pdf",
-                               mime="application/pdf", type="primary",
-                               use_container_width=True)
+            try:
+                pdf_data = build_pdf(st.session_state.generated_report, project)
+                st.download_button("⬇️ Download PDF",
+                                 data=pdf_data,
+                                 file_name=f"inspection_{project_name}.pdf",
+                                 mime="application/pdf", 
+                                 type="primary",
+                                 use_container_width=True)
+            except Exception as e:
+                st.error(f"PDF generation failed: {str(e)}")
         with d2:
             st.download_button("⬇️ Download Markdown",
-                               data=st.session_state.generated_report,
-                               file_name=f"inspection_{project_name}.md",
-                               mime="text/markdown", use_container_width=True)
+                             data=st.session_state.generated_report,
+                             file_name=f"inspection_{project_name}.md",
+                             mime="text/markdown", 
+                             use_container_width=True)
 
 
 def render_dashboard():
@@ -306,20 +333,20 @@ def render_dashboard():
     load_projects()
     load_sample_inspection()
 
-    projects   = st.session_state.get("projects", [])
+    projects = st.session_state.get("projects", [])
     live_items = st.session_state.get("checklist_items", [])
-    photos     = st.session_state.get("photos", [])
+    photos = st.session_state.get("photos", [])
 
-    total_open     = sum(1 for i in live_items if not i.get("checked"))
+    total_open = sum(1 for i in live_items if not i.get("checked"))
     total_critical = sum(1 for i in live_items
-                         if not i.get("checked") and i.get("severity") == "Critical")
+                        if not i.get("checked") and i.get("severity") == "Critical")
     total_inspections = sum(p.get("total_inspections", 0) for p in projects)
 
     st.markdown('<div class="section-header">📊 Project Overview</div>', unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Projects",          len(projects))
-    m2.metric("Open Findings",     total_open)
-    m3.metric("Critical",          total_critical,
+    m1.metric("Projects", len(projects))
+    m2.metric("Open Findings", total_open)
+    m3.metric("Critical", total_critical,
               delta=f"{total_critical} urgent" if total_critical else None,
               delta_color="inverse")
     m4.metric("Total Inspections", total_inspections)
@@ -330,36 +357,44 @@ def render_dashboard():
 
     st.markdown('<div class="section-header">🏗️ Projects</div>', unsafe_allow_html=True)
 
+    # Add new project form
     with st.expander("➕ Add new project"):
         with st.form("new_project_form"):
-            name  = st.text_input("Project name *")
-            addr  = st.text_input("Address *")
+            name = st.text_input("Project name *")
+            addr = st.text_input("Address *")
             btype = st.selectbox("Building type", ["Commercial", "Residential", "Educational"])
-            insp  = st.text_input("Inspector name *")
-            stat  = st.selectbox("Status", ["In progress", "Pending review", "Complete"])
+            insp = st.text_input("Inspector name *")
+            stat = st.selectbox("Status", ["In progress", "Pending review", "Complete", "On hold"])
+            
             if st.form_submit_button("Create project"):
                 if name and addr and insp:
                     st.session_state.projects.append({
                         "id": f"proj-{str(uuid.uuid4())[:6]}",
-                        "name": name, "address": addr, "building_type": btype,
-                        "status": stat, "inspector": insp,
+                        "name": name, 
+                        "address": addr, 
+                        "building_type": btype,
+                        "status": stat, 
+                        "inspector": insp,
                         "last_inspection": "Not yet inspected",
-                        "total_inspections": 0, "open_findings": 0,
-                        "critical_findings": 0, "notes": ""
+                        "total_inspections": 0, 
+                        "open_findings": 0,
+                        "critical_findings": 0, 
+                        "notes": ""
                     })
                     st.success(f"✅ Project '{name}' created!")
                     st.rerun()
                 else:
-                    st.error("Please fill in all required fields.")
+                    st.error("Please fill in all required fields (* required).")
 
     if not projects:
-        st.info("No projects loaded.")
+        st.info("No projects loaded. Create one above or check data/projects.json.")
         return
 
+    # Project list
     for project in projects:
-        status_icon    = STATUS_COLORS.get(project.get("status", ""), "⚪")
+        status_icon = STATUS_COLORS.get(project.get("status", ""), "⚪")
         critical_count = project.get("critical_findings", 0)
-        badge_class    = STATUS_BADGE.get(project.get("status", ""), "badge-progress")
+        badge_class = STATUS_BADGE.get(project.get("status", ""), "badge-progress")
 
         with st.container(border=True):
             h_col, b_col = st.columns([3, 1])
@@ -379,36 +414,37 @@ def render_dashboard():
             i1.markdown(f"**Last inspection**  \n{project.get('last_inspection','—')}")
             i2.markdown(f"**Open findings**  \n{project.get('open_findings', 0)}")
             i3.markdown(f"**Inspections**  \n{project.get('total_inspections', 0)}")
+            
             with btn:
                 if st.button("Start →", key=f"start_{project['id']}", type="primary"):
                     st.session_state.current_project = project
-                    # For proj-001, always reload the sample inspection data
-                    if project["id"] == "proj-001":
-                        import json as _json
+                    # For proj-001, reload sample data
+                    if project.get("id") == "proj-001":
                         data_path = os.path.join(os.path.dirname(__file__), "..", "data", "sample_inspection.json")
                         try:
                             with open(data_path, "r", encoding="utf-8") as f:
-                                sample = _json.load(f)
+                                sample = json.load(f)
                             st.session_state.checklist_items = sample.get("checklist_items", [])
-                            st.session_state.photos          = sample.get("photos", [])
-                            st.session_state.voice_notes     = sample.get("voice_notes", [])
+                            st.session_state.photos = sample.get("photos", [])
+                            st.session_state.voice_notes = sample.get("voice_notes", [])
                         except FileNotFoundError:
-                            pass
+                            st.warning("Sample data not found.")
                     st.rerun()
 
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
 
+            # Show live progress for active project
             if (st.session_state.get("current_project") and
-                    st.session_state.current_project.get("id") == project["id"]):
+                st.session_state.current_project.get("id") == project["id"]):
                 items = st.session_state.checklist_items
                 if items:
                     checked = sum(1 for i in items if i.get("checked"))
-                    total   = len(items)
-                    crit    = sum(1 for i in items
-                                  if i.get("severity") == "Critical" and not i.get("checked"))
+                    total = len(items)
+                    crit = sum(1 for i in items
+                              if i.get("severity") == "Critical" and not i.get("checked"))
                     st.progress(checked / total if total > 0 else 0,
-                                text=f"✅ {checked}/{total} items complete")
+                               text=f"✅ {checked}/{total} items complete")
                     if crit > 0:
                         st.error(f"⚠ {crit} critical item(s) still outstanding")
                     else:
@@ -416,54 +452,66 @@ def render_dashboard():
 
     st.divider()
     render_report_section()
-
     st.divider()
-    st.markdown('<div class="section-header">📸 Photo Gallery</div>', unsafe_allow_html=True)
 
+    # Photo gallery
+    st.markdown('<div class="section-header">📸 Photo Gallery</div>', unsafe_allow_html=True)
     all_photos = st.session_state.get("photos", [])
+    
     if all_photos:
         id_to_name = {p["id"]: p["name"] for p in projects}
         f1, f2, f3 = st.columns(3)
+        
         with f1:
             names = ["All"] + list({
-                id_to_name.get(p.get("project_id", ""), "Unknown") for p in all_photos})
+                id_to_name.get(p.get("project_id", ""), "Unknown") 
+                for p in all_photos
+            })
             selected_project = st.selectbox("Project", names)
+        
         with f2:
             hazards_only = st.checkbox("⚠️ Hazards only")
+        
         with f3:
             search_query = st.text_input("🔍 Search descriptions")
 
+        # Filter photos
         filtered = all_photos
         if selected_project != "All":
             filtered = [p for p in filtered
-                        if id_to_name.get(p.get("project_id", ""), "Unknown") == selected_project]
+                       if id_to_name.get(p.get("project_id", ""), "Unknown") == selected_project]
         if hazards_only:
             filtered = [p for p in filtered if p.get("hazard_flag")]
         if search_query:
             q = search_query.lower()
-            filtered = [p for p in filtered if q in p.get("ai_description", "").lower()]
+            filtered = [p for p in filtered 
+                       if q in p.get("ai_description", "").lower()]
 
         st.caption(f"{len(filtered)} photo(s) shown")
         if not filtered:
             st.info("No photos match the current filters.")
         else:
-            grid = st.columns(3)
             for i, photo in enumerate(filtered):
-                with grid[i % 3]:
-                    with st.expander(photo["filename"], expanded=False):
-                        if photo.get("image_bytes"):
-                            st.image(photo["image_bytes"], use_column_width=True)
-                        else:
-                            st.caption("🖼️ No preview (fixture data)")
+                with st.container():
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        with st.expander(photo["filename"], expanded=False):
+                            if photo.get("image_bytes"):
+                                st.image(photo["image_bytes"], use_column_width=True)
+                            else:
+                                st.caption("🖼️ No preview (fixture data)")
+                    
+                    with col2:
                         if photo.get("hazard_flag"):
                             st.error(f"⚠️ {photo.get('hazard_details','')}")
                         else:
                             st.success("✅ No hazard detected")
-                        st.markdown(
-                            f"**AI description:** {photo.get('ai_description','_Not analysed_')}")
+                        st.markdown(f"**AI description:** {photo.get('ai_description','_Not analysed_')}")
                         pname = id_to_name.get(photo.get("project_id", ""), "Unknown")
-                        st.caption(
-                            f"🗂 {pname}  ·  📍 {photo.get('location','N/A')}"
-                            f"  ·  🕐 {photo.get('timestamp','')[:16]}")
+                        st.caption(f"🗂 {pname}  ·  📍 {photo.get('location','N/A')}  ·  🕐 {photo.get('timestamp','')[:16] if photo.get('timestamp') else 'N/A'}")
     else:
         st.info("No photos yet — upload from the Inspection tab.")
+
+
+if __name__ == "__main__":
+    render_dashboard()
