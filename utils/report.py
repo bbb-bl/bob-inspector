@@ -5,6 +5,22 @@ Builds the LLM prompt from inspection session_state and generates a formal repor
 """
 
 from utils.llm_utils import generate_text
+from datetime import datetime
+import re
+
+
+def _clean_report(text: str) -> str:
+    """Strip markdown formatting so the text area shows clean plain text."""
+    # Remove **bold** markers
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    # Remove *italic* markers
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    # Remove ### headings markers but keep the text
+    text = re.sub(r'^#{1,3}\s+', '', text, flags=re.MULTILINE)
+    # Replace [Insert Date] or similar placeholders just in case
+    text = re.sub(r'\[Insert Date\]', datetime.now().strftime('%d %B %Y'), text)
+    text = re.sub(r'\[.*?\]', '', text)
+    return text
 
 
 def build_report_prompt(project: dict, checklist_items: list, photos: list, voice_notes: list) -> str:
@@ -46,6 +62,7 @@ PROJECT: {project.get('name', 'Unknown')}
 ADDRESS: {project.get('address', 'Unknown')}
 BUILDING TYPE: {project.get('building_type', 'Unknown')}
 INSPECTOR: {project.get('inspector', 'Unknown')}
+INSPECTION DATE: {datetime.now().strftime('%d %B %Y')}
 
 CHECKLIST SUMMARY:
 - Items completed: {len(checked)} of {len(checklist_items)}
@@ -72,11 +89,15 @@ Write a formal inspection report with these sections:
 6. Next Steps
 
 Use formal, professional language appropriate for an official safety report.
+Do NOT use markdown formatting — no ** bold **, no # headings, no * bullets. Use plain text only.
+Do NOT use placeholder text like [Insert Date] — use the actual inspection date provided above.
+Use numbered lists and dashes for structure instead of markdown symbols.
 """
     return prompt
 
 
 def generate_report(project: dict, checklist_items: list, photos: list, voice_notes: list) -> str:
-    """Full pipeline: build prompt → call LLM → return report text."""
+    """Full pipeline: build prompt → call LLM → clean → return report text."""
     prompt = build_report_prompt(project, checklist_items, photos, voice_notes)
-    return generate_text(prompt)
+    raw = generate_text(prompt)
+    return _clean_report(raw)

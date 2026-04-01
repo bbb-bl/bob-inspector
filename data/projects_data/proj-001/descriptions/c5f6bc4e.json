@@ -1,0 +1,10 @@
+{
+  "id": "c5f6bc4e",
+  "project_id": "proj-001",
+  "filename": "pexels-davidelocatelli-2383649.jpg",
+  "timestamp": "2026-03-24T20:27:21.043508",
+  "location": "Barcelona, Spain",
+  "ai_description": "The construction site appears to have multiple workers wearing personal protective equipment (PPE) such as hard hats and high-visibility vests. However, the site is still in a state of disarray with exposed rebar, uneven surfaces, and various construction materials scattered about. A portable toilet is visible on site, which is a good practice for worker welfare.",
+  "hazard_flag": true,
+  "hazard_details": "There are several visible safety hazards, including tripping hazards from scattered materials and uneven surfaces, as well as potential fall hazards from exposed rebar and incomplete flooring. Workers seem to be in close proximity to potential falling objects and there is a risk of being struck by moving objects or falling from heights. Additionally, the presence of a portable toilet indicates that regular breaks are being accommodated, but sanitation and hygiene practices should be monitored to prevent health risks."
+}

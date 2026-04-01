@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "text": "Floor three stairwell has a missing handrail on the left side. Needs immediate attention.",
+    "zone": "Floor 3",
+    "auto_severity": "Critical"
+  },
+  {
+    "id": 2,
+    "text": "Scaffolding on the east facade looks unstable. Two anchor points appear loose.",
+    "zone": "Exterior",
+    "auto_severity": "Critical"
+  },
+  {
+    "id": 3,
+    "text": "Workers on level two are not wearing high-vis vests. Reminded site manager.",
+    "zone": "Floor 2",
+    "auto_severity": "Minor"
+  },
+  {
+    "id": 4,
+    "text": "Fire extinguisher in the basement corridor is expired. Replacement needed before next phase.",
+    "zone": "Basement",
+    "auto_severity": "Critical"
+  },
+  {
+    "id": 5,
+    "text": "Emergency exit on ground floor is partially blocked by materials. Site team notified.",
+    "zone": "Floor 1",
+    "auto_severity": "Critical"
+  },
+  {
+    "id": 6,
+    "text": "Electrical panel on floor two is unlabelled and unlocked. Flagged for site electrician.",
+    "zone": "Floor 2",
+    "auto_severity": "Minor"
+  },
+  {
+    "id": 7,
+    "text": "Safety signage at the main entrance is faded and partially obscured. Recommend replacement.",
+    "zone": "Exterior",
+    "auto_severity": "Recommendation"
+  },
+  {
+    "id": 8,
+    "text": "Chemical storage in the basement has no ventilation and labels are missing. Urgent.",
+    "zone": "Basement",
+    "auto_severity": "Critical"
+  },
+  {
+    "id": 9,
+    "text": "Drinking water station on floor one is empty. Workers using unverified tap water.",
+    "zone": "Floor 1",
+    "auto_severity": "Recommendation"
+  },
+  {
+    "id": 10,
+    "text": "Crane operator confirmed load limits posted and visible. No issues observed.",
+    "zone": "Exterior",
+    "auto_severity": "Recommendation"
+  }
+]
