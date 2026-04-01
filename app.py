@@ -17,6 +17,43 @@ st.set_page_config(
     layout="wide"
 )
 
+# ── Custom CSS ───────────────────────────────────────────────
+st.markdown("""
+<style>
+/* Smoother chat bubbles */
+[data-testid="stChatMessage"] {
+    border-radius: 14px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+}
+/* Primary buttons — brand blue */
+div.stButton > button[kind="primary"] {
+    background-color: #2855C8;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+}
+div.stButton > button[kind="primary"]:hover {
+    background-color: #1e43a8;
+}
+/* Project cards — slightly more padding */
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    padding: 4px 8px;
+}
+/* Project name headings inside cards */
+[data-testid="stVerticalBlockBorderWrapper"] h3 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+/* Center-align the tab bar */
+[data-testid="stTabs"] > div:first-child {
+    justify-content: center;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ── Session State Schema ─────────────────────────────────────
 # This is the shared data contract — everyone builds against these exact keys.
 # Samreen's checklist, Eng's photos, and Aymen's report all read/write from here.
@@ -467,11 +504,66 @@ with tab_dashboard:
     from components.dashboard import render_dashboard
     render_dashboard()
 
+# ── Chat helpers ─────────────────────────────────────────────
+def format_chat_as_text() -> str:
+    """Formats chat_history as a plain-text transcript."""
+    lines = ["BOB — Chat Transcript", "=" * 40]
+    project = st.session_state.get("current_project")
+    if project:
+        lines.append(f"Project: {project['name']}")
+        lines.append(f"Address: {project['address']}")
+    lines.append("")
+    for msg in st.session_state.chat_history:
+        role = "You" if msg["role"] == "user" else "BOB"
+        lines.append(f"[{role}]")
+        lines.append(str(msg.get("content", "")))
+        lines.append("")
+    return "\n".join(lines)
+
+
+def save_chat_to_project_folder() -> str | None:
+    """Saves chat transcript to the active project folder. Returns the path or None."""
+    from datetime import datetime
+    project = st.session_state.get("current_project")
+    if not project:
+        return None
+    project_id = project.get("id", "unknown")
+    chats_dir = os.path.join("data", "projects_data", project_id, "chats")
+    os.makedirs(chats_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(chats_dir, f"chat_{timestamp}.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(format_chat_as_text())
+    return path
+
+
 # ── Tab 3: BOB Chatbot ───────────────────────────────────────
 with tab_bob:
     st.subheader("🤖 Ask BOB")
     st.caption("Your AI construction safety assistant")
-    
+
+    # ── Chat action bar ──────────────────────────────────────
+    action_col1, action_col2, action_col3 = st.columns([1, 1, 6])
+    with action_col1:
+        if st.button("🗑️ Clear chat", help="Clear the conversation history"):
+            st.session_state.chat_history = []
+            st.rerun()
+    with action_col2:
+        if st.session_state.chat_history:
+            chat_txt = format_chat_as_text()
+            project = st.session_state.get("current_project")
+            fname = f"chat_{project['name'].replace(' ', '_')}.txt" if project else "chat_export.txt"
+            if st.download_button(
+                "📥 Export chat",
+                data=chat_txt,
+                file_name=fname,
+                mime="text/plain",
+                help="Download chat as .txt and save to project folder",
+            ):
+                saved_path = save_chat_to_project_folder()
+                if saved_path:
+                    st.toast(f"Saved to {saved_path}", icon="💾")
+
     # Welcome message when chat is empty
     if not st.session_state.chat_history:
         st.info(

@@ -42,6 +42,54 @@ def load_sample_inspection():
         st.session_state.sample_inspection_loaded = True
 
 
+def save_report_to_disk(project: dict, report_text: str) -> str:
+    """Saves a generated report to data/projects_data/{id}/reports/ with a timestamp."""
+    from datetime import datetime
+    project_id = project.get("id", "unknown")
+    reports_dir = os.path.join("data", "projects_data", project_id, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(reports_dir, f"report_{timestamp}.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(report_text)
+    return path
+
+
+def load_saved_reports(project: dict) -> list[tuple[str, str]]:
+    """Returns [(filename, content), ...] sorted oldest→newest for a project."""
+    project_id = project.get("id", "unknown")
+    reports_dir = os.path.join("data", "projects_data", project_id, "reports")
+    if not os.path.exists(reports_dir):
+        return []
+    result = []
+    for fname in sorted(os.listdir(reports_dir)):
+        if fname.endswith(".md"):
+            with open(os.path.join(reports_dir, fname), "r", encoding="utf-8") as f:
+                result.append((fname, f.read()))
+    return result
+
+
+def compare_reports_with_ai(current_report: str, previous_report: str, project: dict) -> str:
+    """Generates a Weekly Progress Summary comparing two reports using the LLM."""
+    from utils.llm_utils import generate_text
+    prompt = (
+        f"You are a construction safety inspector reviewing weekly progress "
+        f"for project: {project.get('name', 'Unknown')}.\n\n"
+        "Compare the two inspection reports below and write a concise "
+        "**Weekly Progress Summary** (under 300 words) covering:\n"
+        "1. Issues resolved since the previous report\n"
+        "2. New findings that appeared\n"
+        "3. Critical items still outstanding\n"
+        "4. Overall progress assessment (Improving / Stable / Declining)\n\n"
+        "--- PREVIOUS REPORT ---\n"
+        f"{previous_report[:3000]}\n\n"
+        "--- CURRENT REPORT ---\n"
+        f"{current_report[:3000]}\n\n"
+        "Weekly Progress Summary:\n"
+    )
+    return generate_text(prompt)
+
+
 STATUS_COLORS = {
     "In progress": "🔵",
     "Pending review": "🟡",
@@ -79,6 +127,9 @@ def render_report_section():
             try:
                 report = generate_report(project, checklist_items, photos, voice_notes)
                 st.session_state.generated_report = report
+                # Auto-save to project folder
+                saved_path = save_report_to_disk(project, report)
+                st.toast(f"Report saved to {saved_path}", icon="💾")
             except Exception as e:
                 st.error(f"Error generating report: {str(e)}")
                 return
@@ -114,6 +165,44 @@ def render_report_section():
                 mime="text/markdown",
             )
 
+        # ── Weekly report comparison ─────────────────────────
+        st.divider()
+        st.markdown("#### 📅 Compare with previous report")
+        saved_reports = load_saved_reports(project)
+        # Need at least 2 saved reports to compare (current was just saved)
+        if len(saved_reports) >= 2:
+            report_names = [r[0] for r in saved_reports]
+            selected_prev = st.selectbox(
+                "Compare current report against:",
+                options=report_names[:-1],          # All except the latest
+                index=len(report_names) - 2,        # Default to the most recent previous
+                format_func=lambda n: n.replace("report_", "").replace(".md", "").replace("_", " "),
+            )
+            if st.button("🔍 Generate Weekly Progress Summary", type="primary"):
+                prev_content = next(c for n, c in saved_reports if n == selected_prev)
+                with st.spinner("BOB is comparing reports..."):
+                    try:
+                        comparison = compare_reports_with_ai(
+                            st.session_state.generated_report,
+                            prev_content,
+                            project,
+                        )
+                        st.session_state["weekly_comparison"] = comparison
+                    except Exception as e:
+                        st.error(f"Error generating comparison: {str(e)}")
+
+            if st.session_state.get("weekly_comparison"):
+                st.markdown("**Weekly Progress Summary**")
+                st.markdown(st.session_state["weekly_comparison"])
+                st.download_button(
+                    "⬇️ Download summary",
+                    data=st.session_state["weekly_comparison"],
+                    file_name=f"weekly_summary_{project_name}.md",
+                    mime="text/markdown",
+                )
+        else:
+            st.caption("Generate at least two reports to enable comparison.")
+
 
 def render_dashboard():
     """Main entry point — call this inside the Dashboard tab."""
@@ -121,6 +210,18 @@ def render_dashboard():
     load_sample_inspection()
 
     projects = st.session_state.get("projects", [])
+
+    # ── Active project banner ────────────────────────────────
+    active = st.session_state.get("current_project")
+    if active:
+        st.markdown(
+            f"<div style='text-align:center; padding:10px 0 4px 0;'>"
+            f"<span style='font-size:0.85rem; color:#aaa;'>Active project</span><br>"
+            f"<span style='font-size:1.6rem; font-weight:700;'>{active['name']}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
 
     st.markdown("## 📊 Project Overview")
 
@@ -140,7 +241,10 @@ def render_dashboard():
 
     st.divider()
 
-    st.markdown("### Projects")
+    st.markdown(
+        "<h3 style='text-align:center; font-size:1.5rem; margin-bottom:12px;'>🏗️ Projects</h3>",
+        unsafe_allow_html=True,
+    )
     # Add new project form
     with st.expander("➕ Add new project"):
         with st.form("new_project_form"):
@@ -192,17 +296,23 @@ def render_dashboard():
                 if critical_count > 0:
                     st.error(f"⚠️ {critical_count} critical")
 
-            info_col1, info_col2, info_col3, btn_col = st.columns([2, 2, 2, 1])
-
+            info_col1, info_col2, info_col3 = st.columns(3)
             info_col1.markdown(f"**Last inspection**  \n{project.get('last_inspection', '—')}")
             info_col2.markdown(f"**Open findings**  \n{project.get('open_findings', 0)}")
             info_col3.markdown(f"**Inspections**  \n{project.get('total_inspections', 0)}")
 
-            with btn_col:
-                if st.button("Start inspection →", key=f"start_{project['id']}"):
-                    st.session_state.current_project = project
-                    st.session_state.active_tab = "Inspection"
-                    st.rerun()
+            is_active = active and active.get("id") == project["id"]
+            btn_label = "✅ Active project" if is_active else "Start inspection →"
+            if st.button(
+                btn_label,
+                key=f"start_{project['id']}",
+                type="primary" if not is_active else "secondary",
+                use_container_width=True,
+                disabled=is_active,
+            ):
+                st.session_state.current_project = project
+                st.session_state.active_tab = "Inspection"
+                st.rerun()
 
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
