@@ -6,6 +6,7 @@ from datetime import datetime
 from PIL import Image
 import io
 
+
 from utils.llm_utils import describe_photo
 from utils.severity import load_checklist_from_csv, classify_severity
 from utils.storage import upload_photo, save_description, load_photos_from_supabase
