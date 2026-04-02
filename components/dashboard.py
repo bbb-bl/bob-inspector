@@ -271,7 +271,22 @@ def render_dashboard():
                         "notes": ""
                     }
                     st.session_state.projects.append(new_project)
-                    st.success(f"✅ Project '{name}' created!")
+
+                    # Save to projects.json so it persists after restart
+                    data_path = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        "..", "data", "projects.json"
+                    )
+                    try:
+                        with open(data_path, "w", encoding="utf-8") as f:
+                            json.dump(st.session_state.projects, f, indent=2, ensure_ascii=False)
+                    except Exception as e:
+                        st.warning(f"Project created but could not save to disk: {e}")
+
+                    # Auto-select new project and go to Inspection tab
+                    st.session_state.current_project = new_project
+                    st.session_state.active_tab = "Inspection"
+                    st.success(f"✅ Project '{name}' created! Redirecting to inspection...")
                     st.rerun()
                 else:
                     st.error("Please fill in all required fields.")
@@ -317,7 +332,7 @@ def render_dashboard():
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
 
-            # Show checklist progress for this project (inside the for loop)
+            # Show checklist progress for this project
             if st.session_state.get("current_project") and st.session_state.get("current_project", {}).get("id") == project["id"]:
                 items = st.session_state.get("checklist_items", [])
                 if items:
@@ -336,6 +351,28 @@ def render_dashboard():
 
     # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────
     st.divider()
+
+    # Load photos from ALL projects into session_state (once per project per session)
+    from utils.storage import load_photos_from_supabase
+    from PIL import Image
+    import io as _io
+    for proj in st.session_state.get("projects", []):
+        gallery_key = f"gallery_loaded_{proj['id']}"
+        if not st.session_state.get(gallery_key):
+            saved = load_photos_from_supabase(proj["name"])
+            existing_ids = [p["id"] for p in st.session_state.photos]
+            for p in saved:
+                if p["id"] not in existing_ids:
+                    if p.get("image_bytes") and "image_pil" not in p:
+                        try:
+                            pil_img = Image.open(_io.BytesIO(p["image_bytes"]))
+                            pil_img.load()
+                            p["image_pil"] = pil_img
+                        except Exception:
+                            p["image_pil"] = None
+                    st.session_state.photos.append(p)
+            st.session_state[gallery_key] = True
+
     st.subheader(f"📸 Photo Gallery ({len(st.session_state.photos)} photos)")
 
     if st.session_state.photos:
@@ -344,18 +381,31 @@ def render_dashboard():
 
         f1, f2, f3 = st.columns(3)
         with f1:
-            project_names = ["All"] + list({id_to_name.get(p.get("project_id", ""), p.get("project_id", "N/A")) for p in st.session_state.photos})
-            selected_project = st.selectbox("Project", project_names)
+            all_project_names = ["All"] + [p["name"] for p in st.session_state.get("projects", [])]
+            active_project = st.session_state.get("current_project")
+            active_name = active_project.get("name") if active_project else None
+            default_idx = all_project_names.index(active_name) if active_name in all_project_names else 0
+            selected_project = st.selectbox("Project", all_project_names, index=default_idx)
         with f2:
             hazards_only = st.checkbox("⚠️ Hazards only")
         with f3:
             search_query = st.text_input("🔍 Search descriptions")
 
-        filtered = st.session_state.photos
+        filtered = list(st.session_state.photos)
         if selected_project != "All":
-            filtered = [p for p in filtered if id_to_name.get(p.get("project_id", ""), p.get("project_id", "N/A")) == selected_project]
+            def matches_project(photo):
+                pid = photo.get("project_id", "")
+                if id_to_name.get(pid) == selected_project:
+                    return True
+                if pid == selected_project:
+                    return True
+                slug = selected_project.lower().replace(" ", "-").replace("/", "-")
+                if pid == slug:
+                    return True
+                return False
+            filtered = [p for p in filtered if matches_project(p)]
         if hazards_only:
-            filtered = [p for p in filtered if p["hazard_flag"]]
+            filtered = [p for p in filtered if p.get("hazard_flag")]
         if search_query:
             q = search_query.lower()
             filtered = [p for p in filtered if q in p.get("ai_description", "").lower()]
@@ -367,11 +417,13 @@ def render_dashboard():
             for i, photo in enumerate(filtered):
                 with grid[i % 3]:
                     with st.expander(photo["filename"], expanded=False):
-                        if photo.get("image_bytes"):
-                            st.image(photo["image_bytes"], use_column_width=True)
+                        if photo.get("image_pil") is not None:
+                            st.image(photo["image_pil"], width=400)
+                        elif photo.get("image_bytes"):
+                            st.image(photo["image_bytes"], width=400)
                         else:
                             st.caption("🖼️ No preview available")
-                        if photo["hazard_flag"]:
+                        if photo.get("hazard_flag"):
                             st.error(f"⚠️ {photo.get('hazard_details', '')}")
                         st.markdown(f"**Description:** {photo.get('ai_description', '_Not yet analysed_')}")
                         _pname = id_to_name.get(photo.get("project_id", ""), photo.get("project_id", "N/A"))

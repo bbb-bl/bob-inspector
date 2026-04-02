@@ -150,6 +150,22 @@ def render():
     def current_project_photos():
         return [p for p in st.session_state.photos if p.get("project_id") == project_id]
 
+    # ── BACKFILL location for all photos using project address ───
+    project_id_to_address = {
+        p["id"]: p.get("address", "Barcelona, Spain")
+        for p in st.session_state.get("projects", [])
+    }
+    project_name_to_address = {
+        p["name"]: p.get("address", "Barcelona, Spain")
+        for p in st.session_state.get("projects", [])
+    }
+    for photo in st.session_state.photos:
+        if photo.get("location") in ["", "Barcelona, Spain", None]:
+            pid = photo.get("project_id", "")
+            # Try by project id first, then by project name
+            address = project_id_to_address.get(pid) or project_name_to_address.get(pid, "Barcelona, Spain")
+            photo["location"] = address
+
     # ── CHECKLIST ────────────────────────────────────────────────
     st.divider()
     st.subheader("📋 Safety Checklist")
@@ -295,7 +311,10 @@ def render():
         if not project_selected:
             st.warning("⚠ Please select a project before uploading photos.")
         else:
-            existing_filenames = [p["filename"] for p in st.session_state.photos]
+            existing_filenames = [
+                p["filename"] for p in st.session_state.photos
+                if p.get("project_id") == project_id
+            ]
             new_count = 0
             for file in uploaded_files:
                 if file.name in existing_filenames or file.name in st.session_state[deleted_key]:
@@ -314,7 +333,7 @@ def render():
                     "project_id": project_id,
                     "filename": file.name,
                     "timestamp": datetime.now().isoformat(),
-                    "location": "Barcelona, Spain",
+                    "location": st.session_state.current_project.get("address", "Barcelona, Spain"),
                     "image_bytes": image_bytes,
                     "image_pil": pil_img,
                     "ai_description": "",

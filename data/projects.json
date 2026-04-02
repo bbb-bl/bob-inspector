@@ -37,5 +37,31 @@
     "critical_findings": 3,
     "inspector": "Maria Garcia",
     "notes": "Urgent: multiple critical findings from last visit unresolved."
+  },
+  {
+    "id": "proj-e9e7fa",
+    "name": "Downtown Condo",
+    "address": "Provenca",
+    "building_type": "Commercial",
+    "status": "In progress",
+    "inspector": "Jane",
+    "last_inspection": "Not yet inspected",
+    "total_inspections": 0,
+    "open_findings": 0,
+    "critical_findings": 0,
+    "notes": ""
+  },
+  {
+    "id": "proj-4a2bb6",
+    "name": "Hotel in city center",
+    "address": "Ciutat Vella, Barcelona",
+    "building_type": "Commercial",
+    "status": "In progress",
+    "inspector": "Bobby",
+    "last_inspection": "Not yet inspected",
+    "total_inspections": 0,
+    "open_findings": 0,
+    "critical_findings": 0,
+    "notes": ""
   }
 ]
