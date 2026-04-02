@@ -301,7 +301,7 @@ def render_dashboard():
             info_col2.markdown(f"**Open findings**  \n{project.get('open_findings', 0)}")
             info_col3.markdown(f"**Inspections**  \n{project.get('total_inspections', 0)}")
 
-            is_active = active and active.get("id") == project["id"]
+            is_active = bool(active and active.get("id") == project["id"])
             btn_label = "✅ Active project" if is_active else "Start inspection →"
             if st.button(
                 btn_label,
@@ -316,21 +316,22 @@ def render_dashboard():
 
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
-    # Show checklist progress for this project
-    if st.session_state.current_project and st.session_state.current_project.get("id") == project["id"]:
-        items = st.session_state.checklist_items
-        if items:
-            checked = sum(1 for i in items if i.get("checked"))
-            total = len(items)
-            critical = sum(1 for i in items if i.get("severity") == "Critical" and not i.get("checked"))
-            st.progress(checked / total if total > 0 else 0)
-            st.caption(f"✅ {checked}/{total} items completed")
-            if critical > 0:
-                st.error(f"⚠ {critical} critical item(s) outstanding")
-            else:
-                st.success("No critical items outstanding")
-        else:
-            st.caption("No checklist started yet")
+
+            # Show checklist progress for this project (inside the for loop)
+            if st.session_state.get("current_project") and st.session_state.get("current_project", {}).get("id") == project["id"]:
+                items = st.session_state.get("checklist_items", [])
+                if items:
+                    checked = sum(1 for i in items if i.get("checked"))
+                    total = len(items)
+                    critical = sum(1 for i in items if i.get("severity") == "Critical" and not i.get("checked"))
+                    st.progress(checked / total if total > 0 else 0)
+                    st.caption(f"✅ {checked}/{total} items completed")
+                    if critical > 0:
+                        st.error(f"⚠ {critical} critical item(s) outstanding")
+                    else:
+                        st.success("No critical items outstanding")
+                else:
+                    st.caption("No checklist started yet")
     render_report_section()
 
     # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────

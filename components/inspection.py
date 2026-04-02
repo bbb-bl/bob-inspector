@@ -80,28 +80,34 @@ def load_photos_from_disk(project_name: str) -> list:
 def render():
     st.header("📋 On-Site Inspection")
 
-    # Project selector
+    # ── SAFE INIT — prevent None crash in dashboard.py
+    if not st.session_state.get("current_project"):
+        st.session_state.current_project = {}
+
+    # ── PROJECT SELECTOR ─────────────────────────────────────────
     if getattr(st.session_state, "projects", None):
         project_names = [p["name"] for p in st.session_state.projects]
 
-        # Pre-select project from dashboard
-        current = st.session_state.get("current_project")
-        default_index = 0
-        if current:
-            try:
-                default_index = project_names.index(current["name"])
-            except ValueError:
-                default_index = 0
-
-        selected = st.selectbox("Select project", project_names, index=default_index)
-        st.session_state.current_project = next(
-            p for p in st.session_state.projects if p["name"] == selected
+        # Always start with no selection — user must choose explicitly
+        selected = st.selectbox(
+            "Select project",
+            project_names,
+            index=None,
+            placeholder="— Choose a project to begin —",
         )
+
+        project_selected = selected is not None
+
+        if project_selected:
+            st.session_state.current_project = next(
+                p for p in st.session_state.projects if p["name"] == selected
+            )
     else:
         st.warning("No projects found — fixtures not loaded yet.")
         st.session_state.current_project = {"id": "demo", "name": "Demo Project"}
+        project_selected = True
 
-    # Ensure state keys exist
+    # ── ENSURE STATE KEYS ────────────────────────────────────────
     if "photos" not in st.session_state:
         st.session_state.photos = []
     if "checklist_items" not in st.session_state:
@@ -114,28 +120,42 @@ def render():
         st.session_state.added_to_checklist = set()
     if "recording" not in st.session_state:
         st.session_state.recording = False
+    if "newly_analysed_ids" not in st.session_state:
+        st.session_state.newly_analysed_ids = set()
+    if "newly_uploaded_ids" not in st.session_state:
+        st.session_state.newly_uploaded_ids = set()
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
 
-     # CHECKLIST
-    # Load saved photos for current project on startup
-    project_id = st.session_state.current_project["id"]
-    loaded_key = f"loaded_{project_id}"
-    if not st.session_state.get(loaded_key):
-        project_name = st.session_state.current_project.get("name", project_id)
-        saved = load_photos_from_supabase(project_name)
-        existing_ids = [p["id"] for p in st.session_state.photos]
-        for p in saved:
-            if p["id"] not in existing_ids:
-                st.session_state.photos.append(p)
-        st.session_state[loaded_key] = True
+    # Load saved photos for current project from Supabase (once per project)
+    project_id = (st.session_state.current_project or {}).get("id", "")
 
-#CHECKLIST
+    # Per-project deleted filenames — must be after project_id is defined
+    deleted_key = f"deleted_filenames_{project_id}"
+    if deleted_key not in st.session_state:
+        st.session_state[deleted_key] = set()
+
+    if project_selected and project_id:
+        loaded_key = f"loaded_{project_id}"
+        if not st.session_state.get(loaded_key):
+            project_name = st.session_state.current_project.get("name", project_id)
+            saved = load_photos_from_supabase(project_name)
+            existing_ids = [p["id"] for p in st.session_state.photos]
+            for p in saved:
+                if p["id"] not in existing_ids:
+                    st.session_state.photos.append(p)
+            st.session_state[loaded_key] = True
+
+    # ── HELPER: photos for THIS project only ────────────────────
+    def current_project_photos():
+        return [p for p in st.session_state.photos if p.get("project_id") == project_id]
+
+    # ── CHECKLIST ────────────────────────────────────────────────
     st.divider()
     st.subheader("📋 Safety Checklist")
 
     # Auto-select building type from current project
-    project_building_type = None
-    if st.session_state.current_project:
-        project_building_type = st.session_state.current_project.get("building_type")
+    project_building_type = st.session_state.current_project.get("building_type")
 
     valid_types = ["Commercial", "Residential", "Educational"]
     if project_building_type in valid_types:
@@ -160,7 +180,6 @@ def render():
         st.session_state["last_building_type"] = building_type
 
     # Sort by severity: Critical first, then Minor, then Recommendation
-    # Within each severity, checked items go to the bottom
     severity_order = {"Critical": 0, "Minor": 1, "Recommendation": 2}
     items = sorted(
         st.session_state.checklist_items,
@@ -180,7 +199,7 @@ def render():
     st.progress(checked_count / total_count if total_count > 0 else 0)
     st.caption(f"{checked_count} of {total_count} items completed")
 
-    # Group items by zone (safe against missing zone keys)
+    # Group items by zone
     zones = {}
     for item in items:
         zone = item.get("zone", "General")
@@ -194,7 +213,6 @@ def render():
             f"{zone} ({zone_checked}/{len(zone_items)} done)", expanded=is_open
         ):
             for item in zone_items:
-                # Severity badge
                 sev = item.get("severity", "Rec")
                 if sev == "Critical":
                     badge = '<span style="background:#FF4444;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Critical</span>'
@@ -211,7 +229,6 @@ def render():
                         value=item.get("checked", False),
                         key=f"chk_{item['id']}",
                     )
-
                     if checked != item.get("checked", False):
                         item["checked"] = checked
                         st.session_state["open_zone"] = zone
@@ -220,7 +237,6 @@ def render():
                 with col2:
                     st.markdown(badge, unsafe_allow_html=True)
 
-                # Detail tooltip and notes field when checked
                 if item.get("detail"):
                     st.caption(f"ℹ {item['detail']}")
 
@@ -231,7 +247,6 @@ def render():
                         key=f"notes_{item['id']}",
                         placeholder="Add observation...",
                     )
-
                     if notes != item.get("notes", ""):
                         item["notes"] = notes
                         item["severity"] = (
@@ -248,7 +263,6 @@ def render():
             label_visibility="collapsed",
             placeholder="Describe the issue...",
         )
-
     with col_btn:
         if st.button("Add", key="add_custom_btn"):
             if custom_text.strip():
@@ -264,53 +278,57 @@ def render():
                     "notes": "",
                     "severity": classify_severity(custom_text.strip()),
                 }
-
                 st.session_state.checklist_items.append(new_item)
                 st.rerun()
 
+    # ── PHOTO UPLOAD ─────────────────────────────────────────────
     st.divider()
-    # Photo upload
     st.subheader("📸 Upload Site Photos")
     uploaded_files = st.file_uploader(
         "Upload site photos",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True,
+        key=f"uploader_{st.session_state.uploader_key}",
     )
 
     if uploaded_files:
-        existing_ids = [p["filename"] for p in st.session_state.photos]
-        new_count = 0
-        for file in uploaded_files:
-            if file.name in existing_ids:
-                continue
+        if not project_selected:
+            st.warning("⚠ Please select a project before uploading photos.")
+        else:
+            existing_filenames = [p["filename"] for p in st.session_state.photos]
+            new_count = 0
+            for file in uploaded_files:
+                if file.name in existing_filenames or file.name in st.session_state[deleted_key]:
+                    continue
 
-            image_bytes = file.read()
-            try:
-                pil_img = Image.open(io.BytesIO(image_bytes))
-                pil_img.load()
-            except Exception:
-                st.warning(f"Skipping {file.name}: not a valid image")
-                continue
+                image_bytes = file.read()
+                try:
+                    pil_img = Image.open(io.BytesIO(image_bytes))
+                    pil_img.load()
+                except Exception:
+                    st.warning(f"Skipping {file.name}: not a valid image")
+                    continue
 
-            photo = {
-                "id": str(uuid.uuid4())[:8],
-                "project_id": project_id,
-                "filename": file.name,
-                "timestamp": datetime.now().isoformat(),
-                "location": "Barcelona, Spain",
-                "image_bytes": image_bytes,
-                "image_pil": pil_img,
-                "ai_description": "",
-                "hazard_flag": False,
-                "hazard_details": "",
-            }
-            st.session_state.photos.append(photo)
-            project_name = st.session_state.current_project.get("name", project_id)
-            upload_photo(photo, project_name)
-            new_count += 1
+                photo = {
+                    "id": str(uuid.uuid4())[:8],
+                    "project_id": project_id,
+                    "filename": file.name,
+                    "timestamp": datetime.now().isoformat(),
+                    "location": "Barcelona, Spain",
+                    "image_bytes": image_bytes,
+                    "image_pil": pil_img,
+                    "ai_description": "",
+                    "hazard_flag": False,
+                    "hazard_details": "",
+                }
+                st.session_state.photos.append(photo)
+                st.session_state.newly_uploaded_ids.add(photo["id"])
+                project_name = st.session_state.current_project.get("name", project_id)
+                upload_photo(photo, project_name)
+                new_count += 1
 
-        if new_count:
-            st.success(f"✅ {new_count} new photo(s) saved!")
+            if new_count:
+                st.success(f"✅ {new_count} new photo(s) saved!")
 
     # Backfill image_pil for older photos
     for photo in st.session_state.photos:
@@ -322,105 +340,159 @@ def render():
             except Exception:
                 photo["image_pil"] = None
 
-    # ── THUMBNAIL GRID (outside if uploaded_files — photos persist after rerun)
-    if st.session_state.photos:
-        photo_count = len(st.session_state.photos)
-        hazard_count = sum(1 for p in st.session_state.photos if p.get("hazard_flag"))
-        analysed_count = sum(1 for p in st.session_state.photos if p.get("ai_description") not in ["", "Analysis unavailable"])
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Photos", photo_count)
-        c2.metric("Analysed", f"{analysed_count}/{photo_count}")
-        c3.metric("⚠ Hazards", hazard_count)
-
-        st.divider()
-
-        cols = st.columns(3)
-        for i, photo in enumerate(st.session_state.photos):
-            with cols[i % 3]:
-                if photo.get("image_pil") is not None:
-                    st.image(photo["image_pil"], caption=photo["filename"], width=200)
-                else:
-                    st.caption(f"🖼️ {photo['filename']} (no preview)")
-
-                _pname = get_project_name_from_id(photo.get("project_id", "N/A"))
-                st.caption(
-                    f"📁 {_pname} | "
-                    f"📍 {photo.get('location', 'N/A')} | "
-                    f"🕐 {photo.get('timestamp', '')[:10]}"
-                )
-
-                if photo.get("hazard_flag"):
-                    st.error("⚠ Hazard detected")
-                elif photo.get("ai_description") == "":
-                    st.caption("🔍 Not analysed yet")
-                elif photo.get("ai_description") == "Analysis unavailable":
-                    st.warning("⚠ Analysis failed")
-                else:
-                    st.success("✅ No hazard detected")
-
-                if photo.get("ai_description") and photo.get("ai_description") not in ["", "Analysis unavailable"]:
-                    st.caption(f"🤖 {photo['ai_description']}")
-                if photo.get("hazard_details"):
-                    st.warning(f"⚠ {photo['hazard_details']}")
-
-        st.divider()
-
-        # Smart analyse button
-        unanalysed = [p for p in st.session_state.photos if p.get("ai_description") == "" and p.get("image_bytes")]
-        if unanalysed:
-            if st.button(f"🤖 Analyse {len(unanalysed)} photo(s) with AI", key="analyse_btn"):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                success, failed = 0, 0
-                total = len(unanalysed)
-
-                for idx, photo in enumerate(unanalysed):
-                    status_text.caption(f"Analysing {photo['filename']} ({idx+1}/{total})...")
-                    try:
-                        result = describe_photo(photo["image_bytes"])
-                        photo["ai_description"] = result.get("description", "")
-                        photo["hazard_flag"] = result.get("hazard_flag", False)
-                        photo["hazard_details"] = result.get("hazard_details", "")
-                        project_name = st.session_state.current_project.get("name", project_id)
-                        save_description(photo, project_name)
-                        success += 1
-                    except Exception:
-                        photo["ai_description"] = "Analysis unavailable"
-                        failed += 1
-                        st.warning(f"Could not analyse {photo['filename']}")
-                    progress_bar.progress((idx + 1) / total)
-
-                status_text.empty()
-                hazards = sum(1 for p in st.session_state.photos if p.get("hazard_flag"))
-                st.success(f"✅ {success} photo(s) analysed. {hazards} hazard(s) detected.")
-                if failed:
-                    st.warning(f"{failed} photo(s) failed.")
-                st.rerun()
-        else:
-            st.success("✅ All photos have been analysed.")
-
-        # Hazard summary
-        hazard_photos = [p for p in st.session_state.photos if p.get("hazard_flag")]
-        if hazard_photos:
-            st.divider()
-            st.markdown("### ⚠ Hazard Summary")
-            st.caption(f"{len(hazard_photos)} hazard(s) found — review before leaving the site:")
-            for p in hazard_photos:
-                with st.container(border=True):
-                    c1, c2 = st.columns([0.3, 0.7])
-                    with c1:
-                        if p.get("image_pil"):
-                            st.image(p["image_pil"], width=120)
-                    with c2:
-                        st.markdown(f"**{p['filename']}**")
-                        st.caption(f"📍 {p.get('location','N/A')}  |  🕐 {p.get('timestamp','')[:10]}")
-                        st.error(f"⚠ {p.get('hazard_details', 'Hazard detected')}")
-
+    # ── THUMBNAIL GRID — only shown after a project is selected ──
+    if not project_selected:
+        pass  # uploader visible above; grid hidden until project chosen
     else:
-        st.info("📷 No photos yet — upload some above to get started.")
+        project_photos = current_project_photos()
 
-    # ── VOICE NOTES ─────────────────────────────────────────────
+        if project_photos:
+            photo_count = len(project_photos)
+            hazard_count = sum(1 for p in project_photos if p.get("hazard_flag"))
+            analysed_count = sum(
+                1 for p in project_photos
+                if p.get("ai_description") not in ["", "Analysis unavailable"]
+            )
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Photos", photo_count)
+            c2.metric("Analysed", f"{analysed_count}/{photo_count}")
+            c3.metric("⚠ Hazards", hazard_count)
+
+            st.divider()
+
+            # Split into previous vs newly uploaded this session
+            old_photos = [p for p in project_photos if p["id"] not in st.session_state.newly_uploaded_ids]
+            new_photos = [p for p in project_photos if p["id"] in st.session_state.newly_uploaded_ids]
+
+            # ── Section 1: Previous photos (thumbnail grid only) ──
+            if old_photos:
+                st.markdown("## 📂 Previous photos")
+                cols = st.columns(3)
+                for i, photo in enumerate(old_photos):
+                    with cols[i % 3]:
+                        if photo.get("image_pil") is not None:
+                            st.image(photo["image_pil"], caption=photo["filename"], width=200)
+                        else:
+                            st.caption(f"🖼️ {photo['filename']} (no preview)")
+                        st.caption(
+                            f"📍 {photo.get('location', 'N/A')} | "
+                            f"🕐 {photo.get('timestamp', '')[:10]}"
+                        )
+
+            # ── Section 2: Newly uploaded photos (image + AI side by side if analysed) ──
+            if new_photos:
+                if old_photos:
+                    st.divider()
+                st.markdown("## 🆕 Newly uploaded photos")
+                for photo in new_photos:
+                    with st.container(border=True):
+                        img_col, ai_col = st.columns([0.35, 0.65])
+                        with img_col:
+                            if photo.get("image_pil") is not None:
+                                st.image(photo["image_pil"], caption=photo["filename"], width=400)
+                            else:
+                                st.caption(f"🖼️ {photo['filename']} (no preview)")
+                            st.caption(
+                                f"📍 {photo.get('location', 'N/A')} | "
+                                f"🕐 {photo.get('timestamp', '')[:10]}"
+                            )
+                        with ai_col:
+                            ai_desc = photo.get("ai_description", "")
+                            if ai_desc == "":
+                                st.caption("🔍 Not analysed yet — click Analyse to run AI detection")
+                                st.markdown("""
+                                <style>
+                                div.delete-btn > div[data-testid="stButton"] > button {
+                                    background-color: #dc3545 !important;
+                                    color: white !important;
+                                    border-color: #dc3545 !important;
+                                }
+                                div.delete-btn > div[data-testid="stButton"] > button:hover {
+                                    background-color: #a71d2a !important;
+                                }
+                                </style>
+                                """, unsafe_allow_html=True)
+                                st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
+                                if st.button("🗑 Delete photo", key=f"del_{photo['id']}"):
+                                    st.session_state[deleted_key].add(photo["filename"])
+                                    st.session_state.photos = [
+                                        p for p in st.session_state.photos if p["id"] != photo["id"]
+                                    ]
+                                    st.session_state.newly_uploaded_ids.discard(photo["id"])
+                                    st.session_state.uploader_key += 1
+                                    st.rerun()
+                                st.markdown('</div>', unsafe_allow_html=True)
+                            elif ai_desc == "Analysis unavailable":
+                                st.warning("⚠ Analysis failed")
+                            elif photo.get("hazard_flag"):
+                                st.error("## ⚠ Hazard detected")
+                                if photo.get("hazard_details"):
+                                    st.warning(photo['hazard_details'])
+                                st.write(ai_desc)
+                            else:
+                                st.success("## ✅ No hazard detected")
+                                st.write(ai_desc)
+
+            st.divider()
+
+            unanalysed = [
+                p for p in project_photos
+                if p.get("ai_description") == "" and p.get("image_bytes")
+            ]
+            if unanalysed:
+                if st.button(f"🤖 Analyse {len(unanalysed)} photo(s) with AI", key="analyse_btn"):
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    success, failed = 0, 0
+                    total = len(unanalysed)
+
+                    for idx, photo in enumerate(unanalysed):
+                        status_text.caption(f"Analysing {photo['filename']} ({idx+1}/{total})...")
+                        try:
+                            result = describe_photo(photo["image_bytes"])
+                            photo["ai_description"] = result.get("description", "")
+                            photo["hazard_flag"] = result.get("hazard_flag", False)
+                            photo["hazard_details"] = result.get("hazard_details", "")
+                            project_name = st.session_state.current_project.get("name", project_id)
+                            save_description(photo, project_name)
+                            st.session_state.newly_analysed_ids.add(photo["id"])
+                            success += 1
+                        except Exception:
+                            photo["ai_description"] = "Analysis unavailable"
+                            failed += 1
+                            st.warning(f"Could not analyse {photo['filename']}")
+                        progress_bar.progress((idx + 1) / total)
+
+                    status_text.empty()
+                    hazards = sum(1 for p in project_photos if p.get("hazard_flag"))
+                    st.success(f"✅ {success} photo(s) analysed. {hazards} hazard(s) detected.")
+                    if failed:
+                        st.warning(f"{failed} photo(s) failed.")
+                    st.rerun()
+            else:
+                st.success("✅ All photos have been analysed.")
+
+            hazard_photos = [p for p in project_photos if p.get("hazard_flag")]
+            if hazard_photos:
+                st.divider()
+                st.markdown("### ⚠ Hazard Summary")
+                st.caption(f"{len(hazard_photos)} hazard(s) found — review before leaving the site:")
+                for p in hazard_photos:
+                    with st.container(border=True):
+                        c1, c2 = st.columns([0.3, 0.7])
+                        with c1:
+                            if p.get("image_pil"):
+                                st.image(p["image_pil"], width=120)
+                        with c2:
+                            st.markdown(f"**{p['filename']}**")
+                            st.caption(f"📍 {p.get('location','N/A')}  |  🕐 {p.get('timestamp','')[:10]}")
+                            st.error(f"⚠ {p.get('hazard_details', 'Hazard detected')}")
+
+        else:
+            st.info("📷 No photos yet — upload some above to get started.")
+
+    # ── VOICE NOTES ──────────────────────────────────────────────
     st.divider()
     st.subheader("🎙 Voice Notes")
 
