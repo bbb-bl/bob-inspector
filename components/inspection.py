@@ -78,7 +78,7 @@ def load_photos_from_disk(project_name: str) -> list:
 
 
 def render():
-    st.header("📋 On-Site Inspection")
+    st.header("On-Site Inspection")
 
     # ── SAFE INIT — prevent None crash in dashboard.py
     if not st.session_state.get("current_project"):
@@ -168,7 +168,7 @@ def render():
 
     # ── CHECKLIST ────────────────────────────────────────────────
     st.divider()
-    st.subheader("📋 Safety Checklist")
+    st.subheader("Safety Checklist")
 
     # Auto-select building type from current project
     project_building_type = st.session_state.current_project.get("building_type")
@@ -176,7 +176,7 @@ def render():
     valid_types = ["Commercial", "Residential", "Educational"]
     if project_building_type in valid_types:
         building_type = project_building_type
-        st.caption(f"📋 Checklist type auto-set to **{building_type}** based on selected project.")
+        st.caption(f"Checklist type auto-set to **{building_type}** based on selected project.")
     else:
         building_type = st.selectbox(
             "Building type",
@@ -299,7 +299,7 @@ def render():
 
     # ── PHOTO UPLOAD ─────────────────────────────────────────────
     st.divider()
-    st.subheader("📸 Upload Site Photos")
+    st.subheader("Upload Site Photos")
     uploaded_files = st.file_uploader(
         "Upload site photos",
         type=["jpg", "jpeg", "png"],
@@ -513,7 +513,7 @@ def render():
 
     # ── VOICE NOTES ──────────────────────────────────────────────
     st.divider()
-    st.subheader("🎙 Voice Notes")
+    st.subheader("Voice Notes")
 
     col_rec, col_status = st.columns([0.3, 0.7])
 
