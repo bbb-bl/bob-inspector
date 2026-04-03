@@ -211,35 +211,7 @@ def render_dashboard():
 
     projects = st.session_state.get("projects", [])
 
-    # ── Active project banner ────────────────────────────────
     active = st.session_state.get("current_project")
-    if active:
-        st.markdown(
-            f"<div style='text-align:center; padding:10px 0 4px 0;'>"
-            f"<span style='font-size:0.85rem; color:#aaa;'>Active project</span><br>"
-            f"<span style='font-size:1.6rem; font-weight:700;'>{active['name']}</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.divider()
-
-    st.markdown("## 📊 Project Overview")
-
-    total_projects = len(projects)
-    total_inspections = sum(p.get("total_inspections", 0) for p in projects)
-
-    # Compute live from session_state so metrics update as the inspector works
-    live_items = st.session_state.get("checklist_items", [])
-    total_open = sum(1 for i in live_items if not i.get("checked"))
-    total_critical = sum(1 for i in live_items if not i.get("checked") and i.get("severity") == "Critical")
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Projects", total_projects)
-    m2.metric("Open Findings", total_open)
-    m3.metric("Critical", total_critical, delta=None if total_critical == 0 else f"{total_critical} urgent", delta_color="inverse")
-    m4.metric("Total Inspections", total_inspections)
-
-    st.divider()
 
     st.markdown(
         "<h3 style='text-align:center; font-size:1.5rem; margin-bottom:12px;'>🏗️ Projects</h3>",
@@ -255,7 +227,7 @@ def render_dashboard():
         st.success("✅ Project created successfully! Scroll down to find it in the Projects list.")
         st.session_state.project_created = False
 
-    with st.expander("➕ Add new project", expanded=st.session_state.show_project_form):
+    with st.expander("➕  Add New Project — Click to expand", expanded=st.session_state.show_project_form):
         with st.form("new_project_form", clear_on_submit=True):
             name = st.text_input("Project name *")
             address = st.text_input("Address *")
@@ -350,19 +322,58 @@ def render_dashboard():
             if project.get("notes"):
                 st.caption(f"💬 {project['notes']}")
 
-            # Show checklist progress for this project
+            # Project inspection brief
+            insp_date = project.get('last_inspection', 'Not yet inspected')
+            open_f = project.get('open_findings', 0)
+            crit_f = project.get('critical_findings', 0)
+            n_insp = project.get('total_inspections', 0)
+            brief_color = "#DC2626" if crit_f > 0 else "#16A34A"
+            crit_label = f"⚠️ {crit_f} critical unresolved" if crit_f > 0 else "✅ No critical items"
+            st.markdown(f"""
+            <div style="background:#F8FAFC;border-radius:8px;padding:10px 14px;
+                        margin-top:8px;border-left:4px solid {brief_color};font-size:0.82rem;color:#475569">
+                📅 Last inspected: <b>{insp_date}</b> &nbsp;·&nbsp;
+                📋 {open_f} open finding(s) &nbsp;·&nbsp;
+                🔍 {n_insp} inspection(s) conducted &nbsp;·&nbsp;
+                <span style="color:{brief_color};font-weight:600">{crit_label}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Show active inspection details inside the card
             if st.session_state.get("current_project") and st.session_state.get("current_project", {}).get("id") == project["id"]:
                 items = st.session_state.get("checklist_items", [])
                 if items:
                     checked = sum(1 for i in items if i.get("checked"))
                     total = len(items)
                     critical = sum(1 for i in items if i.get("severity") == "Critical" and not i.get("checked"))
-                    st.progress(checked / total if total > 0 else 0)
-                    st.caption(f"✅ {checked}/{total} items completed")
-                    if critical > 0:
-                        st.error(f"⚠ {critical} critical item(s) outstanding")
-                    else:
-                        st.success("No critical items outstanding")
+                    pct = int(checked / total * 100) if total else 0
+                    status_text = f"⚠️ {critical} critical item(s) outstanding" if critical > 0 else "✅ No critical items"
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#1D4ED8,#1565C0);
+                                border-radius:10px;padding:14px 18px;margin-top:10px;
+                                box-shadow:0 4px 12px rgba(29,78,216,0.2)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                            <div>
+                                <div style="color:rgba(255,255,255,0.75);font-size:0.68rem;font-weight:700;
+                                            text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px">
+                                    🔵 Active Inspection
+                                </div>
+                                <div style="color:white;font-size:0.82rem;font-weight:600">{status_text}</div>
+                            </div>
+                            <div style="text-align:right">
+                                <div style="color:white;font-size:1.8rem;font-weight:800;line-height:1">{pct}%</div>
+                                <div style="color:rgba(255,255,255,0.7);font-size:0.68rem;font-weight:600;
+                                            text-transform:uppercase;letter-spacing:0.08em">Compliance</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:10px;background:rgba(255,255,255,0.2);border-radius:4px;height:5px">
+                            <div style="background:white;border-radius:4px;height:5px;width:{pct}%"></div>
+                        </div>
+                        <div style="color:rgba(255,255,255,0.65);font-size:0.7rem;margin-top:4px">
+                            {checked}/{total} checklist items complete
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
                     st.caption("No checklist started yet")
     render_report_section()
