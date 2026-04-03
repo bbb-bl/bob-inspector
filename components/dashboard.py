@@ -373,8 +373,6 @@ def render_dashboard():
                     st.session_state.photos.append(p)
             st.session_state[gallery_key] = True
 
-    st.subheader(f"📸 Photo Gallery ({len(st.session_state.photos)} photos)")
-
     if st.session_state.photos:
         # Build lookup: project_id -> project name
         id_to_name = {p["id"]: p["name"] for p in st.session_state.get("projects", [])}
@@ -409,6 +407,9 @@ def render_dashboard():
         if search_query:
             q = search_query.lower()
             filtered = [p for p in filtered if q in p.get("ai_description", "").lower()]
+
+        # Update header count after filtering
+        st.subheader(f"📸 Photo Gallery ({len(filtered)} photos)")
 
         if not filtered:
             st.info("No photos match the current filters.")
