@@ -246,8 +246,17 @@ def render_dashboard():
         unsafe_allow_html=True,
     )
     # Add new project form
-    with st.expander("➕ Add new project"):
-        with st.form("new_project_form"):
+    if "project_created" not in st.session_state:
+        st.session_state.project_created = False
+    if "show_project_form" not in st.session_state:
+        st.session_state.show_project_form = False
+
+    if st.session_state.project_created:
+        st.success("✅ Project created successfully! Scroll down to find it in the Projects list.")
+        st.session_state.project_created = False
+
+    with st.expander("➕ Add new project", expanded=st.session_state.show_project_form):
+        with st.form("new_project_form", clear_on_submit=True):
             name = st.text_input("Project name *")
             address = st.text_input("Address *")
             building_type = st.selectbox("Building type *", ["Commercial", "Residential", "Educational"])
@@ -271,6 +280,10 @@ def render_dashboard():
                         "notes": ""
                     }
                     st.session_state.projects.append(new_project)
+                    st.session_state.project_created = True
+                    st.rerun()
+                else:
+                    st.error("Please fill in all required fields.")
 
                     # Save to projects.json so it persists after restart
                     data_path = os.path.join(
@@ -288,8 +301,6 @@ def render_dashboard():
                     st.session_state.active_tab = "Inspection"
                     st.success(f"✅ Project '{name}' created! Redirecting to inspection...")
                     st.rerun()
-                else:
-                    st.error("Please fill in all required fields.")
 
         if not projects:
             st.info("No projects loaded. Check that data/projects.json exists.")
@@ -327,6 +338,13 @@ def render_dashboard():
             ):
                 st.session_state.current_project = project
                 st.session_state.active_tab = "Inspection"
+                st.rerun()
+
+            if st.button("🗑 Delete project", key=f"delete_{project['id']}"):
+                st.session_state.projects = [
+                    p for p in st.session_state.projects
+                    if p["id"] != project["id"]
+                ]
                 st.rerun()
 
             if project.get("notes"):
