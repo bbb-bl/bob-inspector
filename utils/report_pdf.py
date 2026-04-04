@@ -15,6 +15,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import (
     HRFlowable,
+    Image,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -178,7 +179,7 @@ def _parse_markdown_report(report_text: str, styles: dict) -> list:
     return flowables
 
 
-def build_pdf(report_text: str, project: dict) -> bytes:
+def build_pdf(report_text: str, project: dict, photos: list = None, signature: str = None, signed_at: str = None) -> bytes:
     """
     Full pipeline: markdown report text + project dict → PDF bytes.
     Returns raw bytes ready to pass to st.download_button().
@@ -214,8 +215,67 @@ def build_pdf(report_text: str, project: dict) -> bytes:
     # ── Report body (parsed from markdown) ───────────────────
     story.extend(_parse_markdown_report(report_text, styles))
 
-    # ── Footer note ──────────────────────────────────────────
+    # ── Hazard photo section ──────────────────────────────────
+    hazard_photos = [p for p in (photos or []) if p.get("hazard_flag") and p.get("image_bytes")]
+    if hazard_photos:
+        story.append(Spacer(1, 16))
+        story.append(HRFlowable(width="100%", thickness=1, color=BRAND_BLUE))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Photo Evidence — Hazard Findings", styles["h1"]))
+        story.append(Spacer(1, 8))
+        for photo in hazard_photos:
+            try:
+                img_buf = io.BytesIO(photo["image_bytes"])
+                img = Image(img_buf, width=12 * cm, height=8 * cm, kind="bound")
+                caption_text = (
+                    f"{photo.get('filename', 'Photo')}  ·  "
+                    f"{photo.get('location', '')}  ·  "
+                    f"{photo.get('timestamp', '')[:16]}"
+                )
+                hazard_text = photo.get("hazard_details", "Hazard detected")
+                story.append(img)
+                story.append(Spacer(1, 4))
+                story.append(Paragraph(caption_text, styles["subtitle"]))
+                story.append(Paragraph(f"Finding: {hazard_text}", styles["critical"]))
+                story.append(Spacer(1, 14))
+            except Exception:
+                story.append(Paragraph(
+                    f"[Photo: {photo.get('filename', 'unknown')} — could not embed]",
+                    styles["bullet"],
+                ))
+
+    # ── Signature block ───────────────────────────────────────
     story.append(Spacer(1, 20))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=BRAND_GREY))
+    story.append(Spacer(1, 12))
+    date_str = datetime.now().strftime("%d %B %Y")
+    sig_name = signature or project.get("inspector", "—")
+    sig_date = signed_at or date_str
+    sig_data = [
+        ["Inspector", sig_name],
+        ["Signed",    sig_date],
+        ["Project",   project.get("name", "—")],
+    ]
+    sig_table = Table(sig_data, colWidths=[3.5 * cm, 13 * cm])
+    sig_table.setStyle(TableStyle([
+        ("FONTNAME",      (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE",      (0, 0), (-1, -1), 10),
+        ("TEXTCOLOR",     (0, 0), (0, -1), BRAND_GREY),
+        ("TEXTCOLOR",     (1, 0), (1, -1), BRAND_DARK),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LINEABOVE",     (0, 0), (-1, 0), 0.5, BRAND_BLUE),
+    ]))
+    story.append(sig_table)
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(
+        "This report was digitally signed via BOB Inspector. "
+        "The typed name above constitutes the inspector's confirmation of findings.",
+        styles["footer"],
+    ))
+
+    # ── Footer note ──────────────────────────────────────────
+    story.append(Spacer(1, 12))
     story.append(HRFlowable(width="100%", thickness=0.5, color=BRAND_GREY))
     story.append(Spacer(1, 4))
     story.append(Paragraph(

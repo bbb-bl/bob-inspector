@@ -102,7 +102,20 @@ STRICT FORMATTING RULES:
 
 
 def generate_report(project: dict, checklist_items: list, photos: list, voice_notes: list) -> str:
-    """Full pipeline: build prompt → call LLM → clean → return report text."""
+    """Full pipeline: build prompt → call LLM → clean → prepend header → return report text."""
     prompt = build_report_prompt(project, checklist_items, photos, voice_notes)
     raw = generate_text(prompt)
-    return _clean_report(raw)
+    body = _clean_report(raw)
+
+    today = datetime.now().strftime('%d %B %Y')
+    header = (
+        f"INSPECTION REPORT\n"
+        f"{'=' * 40}\n"
+        f"Project:    {project.get('name', '—')}\n"
+        f"Address:    {project.get('address', '—')}\n"
+        f"Type:       {project.get('building_type', '—')}\n"
+        f"Inspector:  {project.get('inspector', '—')}\n"
+        f"Date:       {today}\n"
+        f"{'=' * 40}\n\n"
+    )
+    return header + body

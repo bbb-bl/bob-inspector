@@ -55,6 +55,42 @@ def save_report_to_disk(project: dict, report_text: str) -> str:
     return path
 
 
+def save_flagged_items(project: dict, checklist_items: list):
+    """Saves outstanding items as a JSON snapshot alongside the report for history tracking."""
+    from datetime import datetime
+    project_id = project.get("id", "unknown")
+    reports_dir = os.path.join("data", "projects_data", project_id, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    outstanding = [
+        {"text": i["text"], "severity": i.get("severity", ""), "zone": i.get("zone", "")}
+        for i in checklist_items if not i.get("checked")
+    ]
+    path = os.path.join(reports_dir, f"flagged_{timestamp}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(outstanding, f, indent=2, ensure_ascii=False)
+
+
+def load_historical_flags(project: dict) -> dict:
+    """Returns {item_text: times_flagged} across all previous flagged snapshots."""
+    project_id = project.get("id", "unknown")
+    reports_dir = os.path.join("data", "projects_data", project_id, "reports")
+    if not os.path.exists(reports_dir):
+        return {}
+    counts = {}
+    for fname in sorted(os.listdir(reports_dir)):
+        if fname.startswith("flagged_") and fname.endswith(".json"):
+            try:
+                with open(os.path.join(reports_dir, fname), "r", encoding="utf-8") as f:
+                    items = json.load(f)
+                for item in items:
+                    text = item.get("text", "")
+                    counts[text] = counts.get(text, 0) + 1
+            except Exception:
+                pass
+    return counts
+
+
 def load_saved_reports(project: dict) -> list[tuple[str, str]]:
     """Returns [(filename, content), ...] sorted oldest→newest for a project."""
     project_id = project.get("id", "unknown")
@@ -90,11 +126,25 @@ def compare_reports_with_ai(current_report: str, previous_report: str, project: 
     return generate_text(prompt)
 
 
-STATUS_COLORS = {
-    "In progress": "🔵",
-    "Pending review": "🟡",
-    "Complete": "🟢",
-    "On hold": "🔴",
+STATUS_PILLS = {
+    "In progress":    ('<span style="background:rgba(59,130,246,0.12);color:#93c5fd;padding:3px 11px;'
+                       'border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.09em;'
+                       'border:1px solid rgba(59,130,246,0.3);white-space:nowrap;">IN PROGRESS</span>'),
+    "Pending review": ('<span style="background:rgba(245,158,11,0.12);color:#fbbf24;padding:3px 11px;'
+                       'border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.09em;'
+                       'border:1px solid rgba(245,158,11,0.3);white-space:nowrap;">PENDING REVIEW</span>'),
+    "Complete":       ('<span style="background:rgba(34,197,94,0.12);color:#4ade80;padding:3px 11px;'
+                       'border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.09em;'
+                       'border:1px solid rgba(34,197,94,0.3);white-space:nowrap;">COMPLETE</span>'),
+    "On hold":        ('<span style="background:rgba(239,68,68,0.12);color:#f87171;padding:3px 11px;'
+                       'border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.09em;'
+                       'border:1px solid rgba(239,68,68,0.3);white-space:nowrap;">ON HOLD</span>'),
+}
+STATUS_ACCENT = {
+    "In progress": "#3B82F6",
+    "Pending review": "#F59E0B",
+    "Complete": "#22C55E",
+    "On hold": "#EF4444",
 }
 
 
@@ -104,7 +154,13 @@ def render_report_section():
     from utils.report_pdf import build_pdf
 
     st.divider()
-    st.markdown("### 📄 Generate Inspection Report")
+    st.markdown(
+        '<div style="margin-bottom:16px;">'
+        '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">AI-Powered</div>'
+        '<div style="font-size:1.9rem;font-weight:900;letter-spacing:0.02em;">Inspection Report</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     project = st.session_state.get("current_project")
     checklist_items = st.session_state.get("checklist_items", [])
@@ -112,7 +168,7 @@ def render_report_section():
     voice_notes = st.session_state.get("voice_notes", [])
 
     if not project:
-        st.info("👆 Click 'Start inspection →' on a project above to select it first.")
+        st.info("→ Click 'Start inspection →' on a project above to select it first.")
         return
 
     st.caption(f"Generating report for: **{project['name']}**")
@@ -122,20 +178,34 @@ def render_report_section():
     col2.metric("Photos", len(photos))
     col3.metric("Voice notes", len(voice_notes))
 
-    if st.button("🤖 Generate report with AI", type="primary"):
-        with st.spinner("BOB is writing your report..."):
-            try:
-                report = generate_report(project, checklist_items, photos, voice_notes)
-                st.session_state.generated_report = report
-                # Auto-save to project folder
-                saved_path = save_report_to_disk(project, report)
-                st.toast(f"Report saved to {saved_path}", icon="💾")
-            except Exception as e:
-                st.error(f"Error generating report: {str(e)}")
-                return
+    btn_col, status_col = st.columns([2, 3])
+    with btn_col:
+        if st.button("Generate report with AI", type="primary", use_container_width=True):
+            with st.spinner("BOB is writing your report..."):
+                try:
+                    from datetime import datetime as _dt
+                    report = generate_report(project, checklist_items, photos, voice_notes)
+                    st.session_state.generated_report = report
+                    saved_path = save_report_to_disk(project, report)
+                    save_flagged_items(project, checklist_items)
+                    st.session_state["report_last_saved"] = _dt.now().strftime("%H:%M")
+                    st.session_state["report_saved_path"] = saved_path
+                    st.session_state["historical_flags"] = load_historical_flags(project)
+                    st.toast(f"Report saved to {saved_path}")
+                except Exception as e:
+                    st.error(f"Error generating report: {str(e)}")
+                    return
+    with status_col:
+        if st.session_state.get("report_last_saved"):
+            st.markdown(
+                f'<div style="padding-top:8px;font-size:0.8rem;color:#4ade80;">'
+                f'● Last saved at {st.session_state["report_last_saved"]}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     if st.session_state.get("generated_report"):
-        st.success("✅ Report generated!")
+        st.success("Report generated!")
 
         edited_report = st.text_area(
             "Report (you can edit before downloading)",
@@ -149,9 +219,21 @@ def render_report_section():
         dl_col1, dl_col2 = st.columns(2)
 
         with dl_col1:
+            proj_id = project.get("id", "")
+            proj_slug = project.get("name", "").lower().replace(" ", "-").replace("/", "-")
+            project_photos = [
+                p for p in st.session_state.get("photos", [])
+                if p.get("project_id") in (proj_id, proj_slug, project.get("name", ""))
+            ]
             st.download_button(
                 label="⬇️ Download PDF",
-                data=build_pdf(st.session_state.generated_report, project),
+                data=build_pdf(
+                    st.session_state.generated_report,
+                    project,
+                    photos=project_photos,
+                    signature=st.session_state.get("inspection_signature"),
+                    signed_at=st.session_state.get("inspection_signed_at"),
+                ),
                 file_name=f"inspection_{project_name}.pdf",
                 mime="application/pdf",
                 type="primary",
@@ -167,7 +249,7 @@ def render_report_section():
 
         # ── Weekly report comparison ─────────────────────────
         st.divider()
-        st.markdown("#### 📅 Compare with previous report")
+        st.markdown("#### Compare with previous report")
         saved_reports = load_saved_reports(project)
         # Need at least 2 saved reports to compare (current was just saved)
         if len(saved_reports) >= 2:
@@ -178,7 +260,7 @@ def render_report_section():
                 index=len(report_names) - 2,        # Default to the most recent previous
                 format_func=lambda n: n.replace("report_", "").replace(".md", "").replace("_", " "),
             )
-            if st.button("🔍 Generate Weekly Progress Summary", type="primary"):
+            if st.button("Generate Weekly Progress Summary", type="primary"):
                 prev_content = next(c for n, c in saved_reports if n == selected_prev)
                 with st.spinner("BOB is comparing reports..."):
                     try:
@@ -214,7 +296,10 @@ def render_dashboard():
     active = st.session_state.get("current_project")
 
     st.markdown(
-        "<h3 style='text-align:center; font-size:1.5rem; margin-bottom:12px;'>🏗️ Projects</h3>",
+        '<div style="text-align:center;margin-bottom:16px;">'
+        '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">Overview</div>'
+        '<div style="font-size:1.4rem;font-weight:800;letter-spacing:0.04em;">Projects</div>'
+        '</div>',
         unsafe_allow_html=True,
     )
     # Add new project form
@@ -224,10 +309,10 @@ def render_dashboard():
         st.session_state.show_project_form = False
 
     if st.session_state.project_created:
-        st.success("✅ Project created successfully! Scroll down to find it in the Projects list.")
+        st.success("Project created successfully! Scroll down to find it in the Projects list.")
         st.session_state.project_created = False
 
-    with st.expander("➕  Add New Project — Click to expand", expanded=st.session_state.show_project_form):
+    with st.expander("+ Add New Project — Click to expand", expanded=st.session_state.show_project_form):
         with st.form("new_project_form", clear_on_submit=True):
             name = st.text_input("Project name *")
             address = st.text_input("Address *")
@@ -271,7 +356,7 @@ def render_dashboard():
                     # Auto-select new project and go to Inspection tab
                     st.session_state.current_project = new_project
                     st.session_state.active_tab = "Inspection"
-                    st.success(f"✅ Project '{name}' created! Redirecting to inspection...")
+                    st.success(f"Project '{name}' created! Redirecting to inspection...")
                     st.rerun()
 
         if not projects:
@@ -279,28 +364,69 @@ def render_dashboard():
             return
 
     for project in projects:
-        status_icon = STATUS_COLORS.get(project.get("status", ""), "⚪")
+        status_pill = STATUS_PILLS.get(project.get("status", ""),
+            '<span style="background:rgba(107,114,128,0.12);color:#9ca3af;padding:3px 11px;'
+            'border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.09em;'
+            'border:1px solid rgba(107,114,128,0.3);">UNKNOWN</span>')
+        accent_color = STATUS_ACCENT.get(project.get("status", ""), "#6B7280")
         critical_count = project.get("critical_findings", 0)
+        is_active = bool(active and active.get("id") == project["id"])
 
-        with st.container(border=True):
+        status_text = project.get("status", "Unknown").upper()
+        crit_suffix = f"  ·  △ {critical_count} CRITICAL" if critical_count > 0 else ""
+        active_suffix = "  ·  ACTIVE" if is_active else ""
+        expander_label = f"{project['name']}    {status_text}{crit_suffix}{active_suffix}"
+
+        with st.expander(expander_label, expanded=is_active):
+            # Colored top accent bar
+            st.markdown(
+                f'<div style="height:3px;background:{accent_color};border-radius:2px;'
+                f'margin:-4px -4px 14px -4px;opacity:0.85;"></div>',
+                unsafe_allow_html=True,
+            )
+
             header_col, badge_col = st.columns([3, 1])
 
             with header_col:
                 st.markdown(f"### {project['name']}")
-                st.caption(f"📍 {project['address']}  ·  🏗️ {project['building_type']}")
+                st.markdown(
+                    f'<p style="color:#6B7280;font-size:0.78rem;margin:-6px 0 8px;">'
+                    f'{project["address"]}  ·  {project["building_type"]}</p>',
+                    unsafe_allow_html=True,
+                )
 
             with badge_col:
-                st.markdown(f"**{status_icon} {project['status']}**")
+                st.markdown(
+                    f'<div style="text-align:right;padding-top:4px;">{status_pill}</div>',
+                    unsafe_allow_html=True,
+                )
                 if critical_count > 0:
-                    st.error(f"⚠️ {critical_count} critical")
+                    st.markdown(
+                        f'<div style="text-align:right;margin-top:6px;">'
+                        f'<span style="background:rgba(239,68,68,0.12);color:#f87171;'
+                        f'padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;'
+                        f'border:1px solid rgba(239,68,68,0.3);">△ {critical_count} CRITICAL</span></div>',
+                        unsafe_allow_html=True,
+                    )
+
+            st.markdown('<div style="height:1px;background:rgba(255,255,255,0.06);margin:4px 0 12px;"></div>',
+                        unsafe_allow_html=True)
 
             info_col1, info_col2, info_col3 = st.columns(3)
-            info_col1.markdown(f"**Last inspection**  \n{project.get('last_inspection', '—')}")
-            info_col2.markdown(f"**Open findings**  \n{project.get('open_findings', 0)}")
-            info_col3.markdown(f"**Inspections**  \n{project.get('total_inspections', 0)}")
+            info_col1.markdown(
+                f'<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.1em;color:#6B7280;font-weight:600;">Last Inspection</div>'
+                f'<div style="font-size:0.88rem;font-weight:500;margin-top:2px;">{project.get("last_inspection", "—")}</div>',
+                unsafe_allow_html=True)
+            info_col2.markdown(
+                f'<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.1em;color:#6B7280;font-weight:600;">Open Findings</div>'
+                f'<div style="font-size:0.88rem;font-weight:500;margin-top:2px;">{project.get("open_findings", 0)}</div>',
+                unsafe_allow_html=True)
+            info_col3.markdown(
+                f'<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.1em;color:#6B7280;font-weight:600;">Inspections</div>'
+                f'<div style="font-size:0.88rem;font-weight:500;margin-top:2px;">{project.get("total_inspections", 0)}</div>',
+                unsafe_allow_html=True)
 
-            is_active = bool(active and active.get("id") == project["id"])
-            btn_label = "✅ Active project" if is_active else "Start inspection →"
+            btn_label = "✓ Active project" if is_active else "Start inspection →"
             if st.button(
                 btn_label,
                 key=f"start_{project['id']}",
@@ -312,15 +438,31 @@ def render_dashboard():
                 st.session_state.active_tab = "Inspection"
                 st.rerun()
 
-            if st.button("🗑 Delete project", key=f"delete_{project['id']}"):
-                st.session_state.projects = [
-                    p for p in st.session_state.projects
-                    if p["id"] != project["id"]
-                ]
-                st.rerun()
+            confirm_key = f"confirm_del_proj_{project['id']}"
+            if not st.session_state.get(confirm_key):
+                if st.button("✕ Delete project", key=f"delete_{project['id']}"):
+                    st.session_state[confirm_key] = True
+                    st.rerun()
+            else:
+                st.warning("This will permanently delete the project. Are you sure?")
+                cy, cn = st.columns(2)
+                with cy:
+                    if st.button("Yes, delete", key=f"del_proj_yes_{project['id']}", type="primary"):
+                        st.session_state.projects = [
+                            p for p in st.session_state.projects
+                            if p["id"] != project["id"]
+                        ]
+                        if st.session_state.get("current_project", {}).get("id") == project["id"]:
+                            st.session_state.current_project = None
+                        st.session_state.pop(confirm_key, None)
+                        st.rerun()
+                with cn:
+                    if st.button("Cancel", key=f"del_proj_no_{project['id']}"):
+                        st.session_state.pop(confirm_key, None)
+                        st.rerun()
 
             if project.get("notes"):
-                st.caption(f"💬 {project['notes']}")
+                st.caption(project['notes'])
 
             # Project inspection brief
             insp_date = project.get('last_inspection', 'Not yet inspected')
@@ -328,26 +470,26 @@ def render_dashboard():
             crit_f = project.get('critical_findings', 0)
             n_insp = project.get('total_inspections', 0)
             brief_color = "#DC2626" if crit_f > 0 else "#16A34A"
-            crit_label = f"⚠️ {crit_f} critical unresolved" if crit_f > 0 else "✅ No critical items"
+            crit_label = f"△ {crit_f} critical unresolved" if crit_f > 0 else "✓ No critical items"
             st.markdown(f"""
             <div style="background:#F8FAFC;border-radius:8px;padding:10px 14px;
                         margin-top:8px;border-left:4px solid {brief_color};font-size:0.82rem;color:#475569">
-                📅 Last inspected: <b>{insp_date}</b> &nbsp;·&nbsp;
-                📋 {open_f} open finding(s) &nbsp;·&nbsp;
-                🔍 {n_insp} inspection(s) conducted &nbsp;·&nbsp;
+                Last inspected: <b>{insp_date}</b> &nbsp;·&nbsp;
+                {open_f} open finding(s) &nbsp;·&nbsp;
+                {n_insp} inspection(s) conducted &nbsp;·&nbsp;
                 <span style="color:{brief_color};font-weight:600">{crit_label}</span>
             </div>
             """, unsafe_allow_html=True)
 
             # Show active inspection details inside the card
-            if st.session_state.get("current_project") and st.session_state.get("current_project", {}).get("id") == project["id"]:
+            if is_active:
                 items = st.session_state.get("checklist_items", [])
                 if items:
                     checked = sum(1 for i in items if i.get("checked"))
                     total = len(items)
                     critical = sum(1 for i in items if i.get("severity") == "Critical" and not i.get("checked"))
                     pct = int(checked / total * 100) if total else 0
-                    status_text = f"⚠️ {critical} critical item(s) outstanding" if critical > 0 else "✅ No critical items"
+                    status_text = f"△ {critical} critical item(s) outstanding" if critical > 0 else "✓ No critical items"
                     st.markdown(f"""
                     <div style="background:linear-gradient(135deg,#1D4ED8,#1565C0);
                                 border-radius:10px;padding:14px 18px;margin-top:10px;
@@ -356,7 +498,7 @@ def render_dashboard():
                             <div>
                                 <div style="color:rgba(255,255,255,0.75);font-size:0.68rem;font-weight:700;
                                             text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px">
-                                    🔵 Active Inspection
+                                    Active Inspection
                                 </div>
                                 <div style="color:white;font-size:0.82rem;font-weight:600">{status_text}</div>
                             </div>
@@ -381,13 +523,20 @@ def render_dashboard():
     # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────
     st.divider()
 
-    # Load photos from ALL projects into session_state (once per project per session)
-    from utils.storage import load_photos_from_supabase
-    from PIL import Image
-    import io as _io
-    for proj in st.session_state.get("projects", []):
-        gallery_key = f"gallery_loaded_{proj['id']}"
-        if not st.session_state.get(gallery_key):
+    st.markdown(
+        '<div style="margin-bottom:12px;">'
+        '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">Documentation</div>'
+        '<div style="font-size:1.3rem;font-weight:800;letter-spacing:0.02em;">Photo Gallery</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Load buttons
+    def _load_photos_for(proj):
+        from utils.storage import load_photos_from_supabase
+        from PIL import Image
+        import io as _io
+        try:
             saved = load_photos_from_supabase(proj["name"])
             existing_ids = [p["id"] for p in st.session_state.photos]
             for p in saved:
@@ -400,7 +549,25 @@ def render_dashboard():
                         except Exception:
                             p["image_pil"] = None
                     st.session_state.photos.append(p)
-            st.session_state[gallery_key] = True
+        except Exception as e:
+            st.warning(f"Could not load photos for {proj['name']}: {e}")
+
+    active_project = st.session_state.get("current_project")
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        current_label = f"Load photos — {active_project['name']}" if active_project else "Load current project photos"
+        if active_project and st.button(current_label, use_container_width=True):
+            with st.spinner(f"Loading photos for {active_project['name']}..."):
+                _load_photos_for(active_project)
+                st.session_state[f"gallery_loaded_{active_project['id']}"] = True
+            st.rerun()
+    with btn_col2:
+        if st.button("Load photos — all projects", use_container_width=True):
+            with st.spinner("Loading photos from Supabase..."):
+                for proj in st.session_state.get("projects", []):
+                    _load_photos_for(proj)
+            st.session_state["gallery_loaded_all"] = True
+            st.rerun()
 
     if st.session_state.photos:
         # Build lookup: project_id -> project name
@@ -414,9 +581,9 @@ def render_dashboard():
             default_idx = all_project_names.index(active_name) if active_name in all_project_names else 0
             selected_project = st.selectbox("Project", all_project_names, index=default_idx)
         with f2:
-            hazards_only = st.checkbox("⚠️ Hazards only")
+            hazards_only = st.checkbox("Hazards only")
         with f3:
-            search_query = st.text_input("🔍 Search descriptions")
+            search_query = st.text_input("Search descriptions")
 
         filtered = list(st.session_state.photos)
         if selected_project != "All":
@@ -438,10 +605,22 @@ def render_dashboard():
             filtered = [p for p in filtered if q in p.get("ai_description", "").lower()]
 
         # Update header count after filtering
-        st.subheader(f"📸 Photo Gallery ({len(filtered)} photos)")
+        st.markdown(
+            f'<div style="margin-bottom:12px;">'
+            f'<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">Documentation</div>'
+            f'<div style="font-size:1.3rem;font-weight:800;letter-spacing:0.02em;">Photo Gallery <span style="font-size:0.9rem;color:#6B7280;font-weight:400;">({len(filtered)} photos)</span></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
         if not filtered:
-            st.info("No photos match the current filters.")
+            st.markdown("""
+            <div style="border:2px dashed rgba(255,255,255,0.1);border-radius:12px;
+                        padding:40px;text-align:center;color:#4B5563;margin:16px 0;">
+                <div style="font-size:1.4rem;margin-bottom:8px;opacity:0.4;">▣</div>
+                <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;color:#6B7280;">No photos match the current filters</div>
+                <div style="font-size:0.8rem;color:#4B5563;">Try adjusting your filter criteria</div>
+            </div>""", unsafe_allow_html=True)
         else:
             grid = st.columns(3)
             for i, photo in enumerate(filtered):
@@ -452,12 +631,10 @@ def render_dashboard():
                         elif photo.get("image_bytes"):
                             st.image(photo["image_bytes"], width=400)
                         else:
-                            st.caption("🖼️ No preview available")
+                            st.caption("No preview available")
                         if photo.get("hazard_flag"):
-                            st.error(f"⚠️ {photo.get('hazard_details', '')}")
+                            st.error(f"△ {photo.get('hazard_details', '')}")
                         st.markdown(f"**Description:** {photo.get('ai_description', '_Not yet analysed_')}")
                         _pname = id_to_name.get(photo.get("project_id", ""), photo.get("project_id", "N/A"))
-                        st.caption(f"🗂 Project: `{_pname}`")
-                        st.caption(f"📍 {photo.get('location', 'N/A')}  |  🕐 {photo.get('timestamp', '')[:16]}")
-    else:
-        st.info("No photos yet — upload from the Inspection tab.")
+                        st.caption(f"Project: {_pname}")
+                        st.caption(f"{photo.get('location', 'N/A')}  ·  {photo.get('timestamp', '')[:16]}")

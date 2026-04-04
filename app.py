@@ -1,6 +1,5 @@
 """
-BOB — The Lily of Construction 🌸
-AI Construction Safety Inspector
+BOB — AI Construction Safety Inspector
 ESADE PDAI 2025
 
 Entry point: streamlit run app.py
@@ -13,43 +12,200 @@ import os
 # ── Page Config ──────────────────────────────────────────────
 st.set_page_config(
     page_title="BOB",
-    page_icon="🌸",
+    page_icon="◆",
     layout="wide"
 )
 
 # ── Custom CSS ───────────────────────────────────────────────
 st.markdown("""
 <style>
-/* Smoother chat bubbles */
-[data-testid="stChatMessage"] {
-    border-radius: 14px;
-    padding: 6px 10px;
-    margin-bottom: 4px;
+/* ── Global spacing ── */
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 2rem !important;
 }
-/* Primary buttons — brand blue */
+
+/* ── Primary buttons ── */
 div.stButton > button[kind="primary"] {
     background-color: #2855C8;
     color: #fff;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     font-weight: 600;
+    letter-spacing: 0.04em;
 }
 div.stButton > button[kind="primary"]:hover {
     background-color: #1e43a8;
 }
-/* Project cards — slightly more padding */
-[data-testid="stVerticalBlockBorderWrapper"] > div {
-    padding: 4px 8px;
+div.stButton > button[kind="secondary"] {
+    border-radius: 6px;
+    border-color: rgba(255,255,255,0.15) !important;
 }
-/* Project name headings inside cards */
+div.stDownloadButton > button {
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+}
+
+/* ── Metric cards ── */
+[data-testid="metric-container"] {
+    background: rgba(255,255,255,0.04) !important;
+    border: 1px solid rgba(255,255,255,0.09) !important;
+    border-radius: 10px !important;
+    padding: 14px 18px !important;
+}
+[data-testid="metric-container"] label {
+    font-size: 0.68rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.12em !important;
+    color: #6B7280 !important;
+    font-weight: 600 !important;
+}
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+}
+
+/* ── Alert / info / warning boxes ── */
+[data-testid="stAlert"] {
+    border-radius: 8px !important;
+    border-left-width: 4px !important;
+    font-size: 0.88rem !important;
+}
+
+/* ── Dividers ── */
+hr {
+    border-color: rgba(255,255,255,0.07) !important;
+    margin: 1.4rem 0 !important;
+}
+
+/* ── Expanders ── */
+[data-testid="stExpander"] {
+    border: 1px solid rgba(255,255,255,0.09) !important;
+    border-radius: 8px !important;
+    margin-bottom: 6px !important;
+}
+[data-testid="stExpander"] summary {
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    letter-spacing: 0.02em !important;
+}
+
+/* ── Captions ── */
+[data-testid="stCaptionContainer"] p {
+    color: #6B7280 !important;
+    font-size: 0.78rem !important;
+}
+
+/* ── Card containers ── */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 12px !important;
+    border-color: rgba(255,255,255,0.1) !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    padding: 4px 12px 12px 12px;
+}
 [data-testid="stVerticalBlockBorderWrapper"] h3 {
-    font-size: 1.35rem;
+    font-size: 1.2rem;
     font-weight: 700;
     margin-bottom: 2px;
+    letter-spacing: 0.01em;
 }
-/* Center-align the tab bar */
-[data-testid="stTabs"] > div:first-child {
-    justify-content: center;
+
+/* ── Progress bar ── */
+[data-testid="stProgressBar"] > div > div {
+    background: linear-gradient(90deg, #2855C8, #4f79e8) !important;
+    border-radius: 4px !important;
+}
+[data-testid="stProgressBar"] > div {
+    background: rgba(255,255,255,0.07) !important;
+    border-radius: 4px !important;
+    height: 6px !important;
+}
+
+/* ── Chat bubbles ── */
+[data-testid="stChatMessage"] {
+    border-radius: 12px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+}
+
+/* ── Selectbox / input ── */
+[data-testid="stSelectbox"] > div > div,
+[data-testid="stTextInput"] > div > div {
+    border-radius: 8px !important;
+    border-color: rgba(255,255,255,0.15) !important;
+}
+
+/* ── Full-width tabs — segmented control style ── */
+[data-baseweb="tab-list"] {
+    width: 100% !important;
+    gap: 4px !important;
+    background: rgba(255,255,255,0.04) !important;
+    border-radius: 10px !important;
+    padding: 5px !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+}
+[data-baseweb="tab"] {
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+    padding: 12px 0 !important;
+    border-radius: 7px !important;
+    transition: background 0.15s ease !important;
+}
+[aria-selected="true"][data-baseweb="tab"] {
+    background: #2855C8 !important;
+    color: white !important;
+}
+[data-baseweb="tab-highlight"] {
+    display: none !important;
+}
+[data-baseweb="tab-border"] {
+    display: none !important;
+}
+
+/* ── Mobile responsive ── */
+@media (max-width: 768px) {
+    .block-container {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+        padding-top: 0.75rem !important;
+    }
+    [data-baseweb="tab"] {
+        font-size: 0.65rem !important;
+        padding: 10px 0 !important;
+        letter-spacing: 0.04em !important;
+    }
+    [data-testid="metric-container"] {
+        padding: 10px 12px !important;
+    }
+    [data-testid="metric-container"] [data-testid="stMetricValue"] {
+        font-size: 1.4rem !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] > div {
+        padding: 4px 8px 10px 8px !important;
+    }
+    /* Stack columns on mobile */
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+    }
+    [data-testid="stHorizontalBlock"] > [data-testid="stVerticalBlock"] {
+        min-width: 140px !important;
+    }
+    /* Larger touch targets for buttons */
+    div.stButton > button,
+    div.stDownloadButton > button {
+        min-height: 44px !important;
+        font-size: 0.85rem !important;
+    }
+    /* Chat input area */
+    [data-testid="stChatInput"] {
+        font-size: 1rem !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -478,20 +634,23 @@ def get_bob_response(user_message):
         return f"Sorry, BOB encountered an error: {str(e)}"
     
 # ── App Header ───────────────────────────────────────────────
-st.markdown(
-    "<h1 style='text-align:center; margin-bottom:0;'>🌸 BOB</h1>"
-    "<p style='text-align:center; color:gray; margin-top:0;'>"
-    "The Lily of Construction — AI Safety Inspector</p>",
-    unsafe_allow_html=True,
-)
-st.divider()
+st.markdown("""
+<div style="display:flex;align-items:center;justify-content:center;gap:18px;padding:8px 0 4px;">
+    <span style="font-size:2.2rem;font-weight:900;letter-spacing:0.12em;color:#ffffff;">BOB</span>
+    <span style="width:1px;height:32px;background:#2855C8;display:inline-block;opacity:0.8;"></span>
+    <span style="color:#6B7280;font-size:0.8rem;letter-spacing:0.14em;text-transform:uppercase;font-weight:600;">
+        AI Construction Safety Inspector
+    </span>
+</div>
+<div style="height:2px;background:linear-gradient(90deg,transparent,#2855C8 30%,#2855C8 70%,transparent);margin:8px 0 0;opacity:0.6;"></div>
+""", unsafe_allow_html=True)
 
 
 # ── Tabs ─────────────────────────────────────────────────────
 tab_inspection, tab_dashboard, tab_bob = st.tabs([
-    "📋 Inspection",
-    "📊 Dashboard",
-    "🤖 BOB",
+    "Inspection",
+    "Dashboard",
+    "BOB",
 ])
 
 # ── Tab 1: Inspection ────────────────────────────────────────
@@ -539,40 +698,62 @@ def save_chat_to_project_folder() -> str | None:
 
 # ── Tab 3: BOB Chatbot ───────────────────────────────────────
 with tab_bob:
-    st.subheader("🤖 Ask BOB")
-    st.caption("Your AI construction safety assistant")
-
-    # ── Chat action bar ──────────────────────────────────────
-    action_col1, action_col2, action_col3 = st.columns([1, 1, 6])
-    with action_col1:
-        if st.button("🗑️ Clear chat", help="Clear the conversation history"):
+    # ── Header row with title + action buttons aligned ───────
+    title_col, actions_col = st.columns([4, 1])
+    with title_col:
+        st.subheader("Ask BOB")
+        st.caption("Your AI construction safety assistant")
+    with actions_col:
+        st.markdown('<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:6px;">', unsafe_allow_html=True)
+        if st.button("✕ Clear chat", help="Clear the conversation history", use_container_width=True):
             st.session_state.chat_history = []
             st.rerun()
-    with action_col2:
         if st.session_state.chat_history:
             chat_txt = format_chat_as_text()
             project = st.session_state.get("current_project")
             fname = f"chat_{project['name'].replace(' ', '_')}.txt" if project else "chat_export.txt"
             if st.download_button(
-                "📥 Export chat",
+                "↓ Export chat",
                 data=chat_txt,
                 file_name=fname,
                 mime="text/plain",
                 help="Download chat as .txt and save to project folder",
+                use_container_width=True,
             ):
                 saved_path = save_chat_to_project_folder()
                 if saved_path:
-                    st.toast(f"Saved to {saved_path}", icon="💾")
+                    st.toast(f"Saved to {saved_path}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Welcome message when chat is empty
     if not st.session_state.chat_history:
-        st.info(
-            "👋 I'm **BOB**, your construction safety assistant.\n\n"
-            "Try asking me:\n"
-            '- *"What\'s the status of my checklist?"*\n'
-            '- *"Draft a note about a missing guardrail on floor 3"*\n'
-            '- *"Summarize today\'s findings"*'
-        )
+        st.markdown("""
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
+                    border-left:3px solid #2855C8;border-radius:8px;padding:16px 20px;margin:8px 0 16px;">
+            <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px;">I'm BOB, your construction safety assistant.</div>
+            <div style="color:#6B7280;font-size:0.82rem;">Ask me anything about your inspection — checklist status, regulations, hazard findings, or draft a formal report.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Quick-action buttons ─────────────────────────────────
+    st.markdown(
+        '<div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;'
+        'color:#6B7280;font-weight:600;margin:4px 0 6px;">Quick actions</div>',
+        unsafe_allow_html=True,
+    )
+    QUICK_ACTIONS = [
+        "Checklist status",
+        "List critical items",
+        "Summarize findings",
+        "Generate report",
+    ]
+    qa_cols = st.columns(len(QUICK_ACTIONS))
+    for i, action in enumerate(QUICK_ACTIONS):
+        with qa_cols[i]:
+            if st.button(action, key=f"qa_{i}", use_container_width=True):
+                st.session_state["_pending_quick_action"] = action
+                st.rerun()
+
     # Display all previous messages from chat history
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
@@ -580,6 +761,10 @@ with tab_bob:
 
     # Chat input box at the bottom
     user_input = st.chat_input("Ask BOB about your inspection...")
+
+    # Pick up quick-action if one was triggered
+    if "_pending_quick_action" in st.session_state:
+        user_input = st.session_state.pop("_pending_quick_action")
 
     if user_input:
         # 1. Add user message to history
@@ -602,4 +787,4 @@ with tab_bob:
 
 # ── Footer ───────────────────────────────────────────────────
 st.divider()
-st.caption("🌸 BOB v0.1 — PDAI Final Project | ESADE 2025")
+st.caption("BOB v0.1 — PDAI Final Project | ESADE 2025")
