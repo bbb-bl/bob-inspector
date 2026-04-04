@@ -600,3 +600,10 @@ def render():
                             st.rerun()
     else:
         st.caption("No voice notes recorded yet.")
+
+# ── END OF INSPECTION ──────────────────────────────────────────────
+    st.divider()
+    st.markdown("### Done with your inspection?")
+    if st.button("📊 Go to Dashboard to generate and download your report", use_container_width=True):
+        st.session_state.active_tab = "Dashboard"
+        st.rerun()
