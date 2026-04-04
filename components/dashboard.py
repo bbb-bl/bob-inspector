@@ -184,6 +184,28 @@ def render_report_section():
             with st.spinner("BOB is writing your report..."):
                 try:
                     from datetime import datetime as _dt
+                    # Auto-load project photos if not already loaded
+                    proj_id = project.get("id", "")
+                    if not st.session_state.get(f"gallery_loaded_{proj_id}"):
+                        from utils.storage import load_photos_from_supabase
+                        from PIL import Image as _Image
+                        import io as _io
+                        try:
+                            saved = load_photos_from_supabase(project["name"])
+                            existing_ids = [p["id"] for p in st.session_state.photos]
+                            for p in saved:
+                                if p["id"] not in existing_ids:
+                                    if p.get("image_bytes") and "image_pil" not in p:
+                                        try:
+                                            pil_img = _Image.open(_io.BytesIO(p["image_bytes"]))
+                                            pil_img.load()
+                                            p["image_pil"] = pil_img
+                                        except Exception:
+                                            p["image_pil"] = None
+                                    st.session_state.photos.append(p)
+                            st.session_state[f"gallery_loaded_{proj_id}"] = True
+                        except Exception:
+                            pass  # Photos unavailable — report will generate without them
                     report = generate_report(project, checklist_items, photos, voice_notes)
                     st.session_state.generated_report = report
                     saved_path = save_report_to_disk(project, report)
