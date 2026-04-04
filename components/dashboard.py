@@ -163,14 +163,22 @@ def render_report_section():
 
     project = st.session_state.get("current_project")
     checklist_items = st.session_state.get("checklist_items", [])
-    photos = st.session_state.get("photos", [])
     voice_notes = st.session_state.get("voice_notes", [])
 
     if not project:
         st.info("→ Click 'Start inspection →' on a project above to select it first.")
         return
 
-    st.caption(f"Generating report for: **{project['name']}**")
+    # Filter photos to current project only
+    proj_id = project.get("id", "")
+    proj_name = project.get("name", "")
+    proj_slug = proj_name.lower().replace(" ", "-").replace("/", "-")
+    photos = [
+        p for p in st.session_state.get("photos", [])
+        if p.get("project_id") in (proj_id, proj_name, proj_slug)
+    ]
+
+    st.caption(f"Generating report for: **{proj_name}**")
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Checklist items", len(checklist_items))
@@ -240,18 +248,12 @@ def render_report_section():
         dl_col1, dl_col2 = st.columns(2)
 
         with dl_col1:
-            proj_id = project.get("id", "")
-            proj_slug = project.get("name", "").lower().replace(" ", "-").replace("/", "-")
-            project_photos = [
-                p for p in st.session_state.get("photos", [])
-                if p.get("project_id") in (proj_id, proj_slug, project.get("name", ""))
-            ]
             st.download_button(
                 label="⬇️ Download PDF",
                 data=build_pdf(
                     st.session_state.generated_report,
                     project,
-                    photos=project_photos,
+                    photos=photos,
                     signature=st.session_state.get("inspection_signature"),
                     signed_at=st.session_state.get("inspection_signed_at"),
                 ),
