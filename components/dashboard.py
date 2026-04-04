@@ -519,19 +519,23 @@ def render_dashboard():
     for proj in st.session_state.get("projects", []):
         gallery_key = f"gallery_loaded_{proj['id']}"
         if not st.session_state.get(gallery_key):
-            saved = load_photos_from_supabase(proj["name"])
-            existing_ids = [p["id"] for p in st.session_state.photos]
-            for p in saved:
-                if p["id"] not in existing_ids:
-                    if p.get("image_bytes") and "image_pil" not in p:
-                        try:
-                            pil_img = Image.open(_io.BytesIO(p["image_bytes"]))
-                            pil_img.load()
-                            p["image_pil"] = pil_img
-                        except Exception:
-                            p["image_pil"] = None
-                    st.session_state.photos.append(p)
-            st.session_state[gallery_key] = True
+            try:
+                saved = load_photos_from_supabase(proj["name"])
+                existing_ids = [p["id"] for p in st.session_state.photos]
+                for p in saved:
+                    if p["id"] not in existing_ids:
+                        if p.get("image_bytes") and "image_pil" not in p:
+                            try:
+                                pil_img = Image.open(_io.BytesIO(p["image_bytes"]))
+                                pil_img.load()
+                                p["image_pil"] = pil_img
+                            except Exception:
+                                p["image_pil"] = None
+                        st.session_state.photos.append(p)
+            except Exception:
+                pass  # Network blip — silently skip, will retry next session
+            finally:
+                st.session_state[gallery_key] = True  # Always mark done to avoid infinite retry
 
     if st.session_state.photos:
         # Build lookup: project_id -> project name
