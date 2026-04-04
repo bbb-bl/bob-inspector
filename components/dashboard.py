@@ -517,28 +517,41 @@ def render_dashboard():
     # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────
     st.divider()
 
-    # Load photos from ALL projects into session_state (once per project per session)
-    from utils.storage import load_photos_from_supabase
-    from PIL import Image
-    import io as _io
-    for proj in st.session_state.get("projects", []):
-        gallery_key = f"gallery_loaded_{proj['id']}"
-        if not st.session_state.get(gallery_key):
-            saved = load_photos_from_supabase(proj["name"])
-            existing_ids = [p["id"] for p in st.session_state.photos]
-            for p in saved:
-                if p["id"] not in existing_ids:
-                    if p.get("image_bytes") and "image_pil" not in p:
-                        try:
-                            pil_img = Image.open(_io.BytesIO(p["image_bytes"]))
-                            pil_img.load()
-                            p["image_pil"] = pil_img
-                        except Exception:
-                            p["image_pil"] = None
-                    st.session_state.photos.append(p)
-            st.session_state[gallery_key] = True
+    st.markdown(
+        '<div style="margin-bottom:12px;">'
+        '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">Documentation</div>'
+        '<div style="font-size:1.3rem;font-weight:800;letter-spacing:0.02em;">Photo Gallery</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
-    if st.session_state.photos:
+    # Only load from Supabase when the user explicitly requests it
+    if not st.session_state.get("gallery_loaded_all"):
+        if st.button("Load photos from all projects", use_container_width=True):
+            from utils.storage import load_photos_from_supabase
+            from PIL import Image
+            import io as _io
+            with st.spinner("Loading photos from Supabase..."):
+                for proj in st.session_state.get("projects", []):
+                    try:
+                        saved = load_photos_from_supabase(proj["name"])
+                        existing_ids = [p["id"] for p in st.session_state.photos]
+                        for p in saved:
+                            if p["id"] not in existing_ids:
+                                if p.get("image_bytes") and "image_pil" not in p:
+                                    try:
+                                        pil_img = Image.open(_io.BytesIO(p["image_bytes"]))
+                                        pil_img.load()
+                                        p["image_pil"] = pil_img
+                                    except Exception:
+                                        p["image_pil"] = None
+                                st.session_state.photos.append(p)
+                    except Exception as e:
+                        st.warning(f"Could not load photos for {proj['name']}: {e}")
+            st.session_state["gallery_loaded_all"] = True
+            st.rerun()
+
+    if st.session_state.get("gallery_loaded_all") and st.session_state.photos:
         # Build lookup: project_id -> project name
         id_to_name = {p["id"]: p["name"] for p in st.session_state.get("projects", [])}
 
@@ -607,11 +620,3 @@ def render_dashboard():
                         _pname = id_to_name.get(photo.get("project_id", ""), photo.get("project_id", "N/A"))
                         st.caption(f"Project: {_pname}")
                         st.caption(f"{photo.get('location', 'N/A')}  ·  {photo.get('timestamp', '')[:16]}")
-    else:
-        st.markdown("""
-        <div style="border:2px dashed rgba(255,255,255,0.1);border-radius:12px;
-                    padding:48px;text-align:center;color:#4B5563;margin:16px 0;">
-            <div style="font-size:1.6rem;margin-bottom:10px;opacity:0.3;">▣</div>
-            <div style="font-weight:700;font-size:0.95rem;margin-bottom:6px;color:#6B7280;">No photos yet</div>
-            <div style="font-size:0.82rem;color:#4B5563;">Upload site photos from the Inspection tab</div>
-        </div>""", unsafe_allow_html=True)
