@@ -1,5 +1,5 @@
 # BOB Inspector
-### AI Construction Safety Inspector — ESADE PDAI 2025
+### AI Construction Safety Inspector — ESADE PDAI 2026
 
 > **BOB** (Building Observation Bot) is an AI-powered construction site safety inspection platform built for architects and site managers. It replaces paper-based inspection workflows with a real-time digital system: smart checklists, AI photo analysis, voice notes, and automated formal report generation.
 
