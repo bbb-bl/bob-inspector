@@ -219,12 +219,18 @@ def render_report_section():
         dl_col1, dl_col2 = st.columns(2)
 
         with dl_col1:
+            proj_id = project.get("id", "")
+            proj_slug = project.get("name", "").lower().replace(" ", "-").replace("/", "-")
+            project_photos = [
+                p for p in st.session_state.get("photos", [])
+                if p.get("project_id") in (proj_id, proj_slug, project.get("name", ""))
+            ]
             st.download_button(
                 label="⬇️ Download PDF",
                 data=build_pdf(
                     st.session_state.generated_report,
                     project,
-                    photos=st.session_state.get("photos", []),
+                    photos=project_photos,
                     signature=st.session_state.get("inspection_signature"),
                     signed_at=st.session_state.get("inspection_signed_at"),
                 ),
@@ -525,33 +531,45 @@ def render_dashboard():
         unsafe_allow_html=True,
     )
 
-    # Only load from Supabase when the user explicitly requests it
-    if not st.session_state.get("gallery_loaded_all"):
-        if st.button("Load photos from all projects", use_container_width=True):
-            from utils.storage import load_photos_from_supabase
-            from PIL import Image
-            import io as _io
+    # Load buttons
+    def _load_photos_for(proj):
+        from utils.storage import load_photos_from_supabase
+        from PIL import Image
+        import io as _io
+        try:
+            saved = load_photos_from_supabase(proj["name"])
+            existing_ids = [p["id"] for p in st.session_state.photos]
+            for p in saved:
+                if p["id"] not in existing_ids:
+                    if p.get("image_bytes") and "image_pil" not in p:
+                        try:
+                            pil_img = Image.open(_io.BytesIO(p["image_bytes"]))
+                            pil_img.load()
+                            p["image_pil"] = pil_img
+                        except Exception:
+                            p["image_pil"] = None
+                    st.session_state.photos.append(p)
+        except Exception as e:
+            st.warning(f"Could not load photos for {proj['name']}: {e}")
+
+    active_project = st.session_state.get("current_project")
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        current_label = f"Load photos — {active_project['name']}" if active_project else "Load current project photos"
+        if active_project and st.button(current_label, use_container_width=True):
+            with st.spinner(f"Loading photos for {active_project['name']}..."):
+                _load_photos_for(active_project)
+                st.session_state[f"gallery_loaded_{active_project['id']}"] = True
+            st.rerun()
+    with btn_col2:
+        if st.button("Load photos — all projects", use_container_width=True):
             with st.spinner("Loading photos from Supabase..."):
                 for proj in st.session_state.get("projects", []):
-                    try:
-                        saved = load_photos_from_supabase(proj["name"])
-                        existing_ids = [p["id"] for p in st.session_state.photos]
-                        for p in saved:
-                            if p["id"] not in existing_ids:
-                                if p.get("image_bytes") and "image_pil" not in p:
-                                    try:
-                                        pil_img = Image.open(_io.BytesIO(p["image_bytes"]))
-                                        pil_img.load()
-                                        p["image_pil"] = pil_img
-                                    except Exception:
-                                        p["image_pil"] = None
-                                st.session_state.photos.append(p)
-                    except Exception as e:
-                        st.warning(f"Could not load photos for {proj['name']}: {e}")
+                    _load_photos_for(proj)
             st.session_state["gallery_loaded_all"] = True
             st.rerun()
 
-    if st.session_state.get("gallery_loaded_all") and st.session_state.photos:
+    if st.session_state.photos:
         # Build lookup: project_id -> project name
         id_to_name = {p["id"]: p["name"] for p in st.session_state.get("projects", [])}
 
