@@ -4,6 +4,7 @@ Supabase Storage integration for BOB Inspector.
 Photos are saved per project: {project_name}/{photo_id}_{filename}
 """
 
+import time
 import streamlit as st
 from supabase import create_client
 import json
@@ -64,46 +65,57 @@ def save_description(photo: dict, project_name: str) -> bool:
         return False
 
 
-def load_photos_from_supabase(project_name: str) -> list:
-    """Load all photos + descriptions for a project from Supabase."""
-    try:
-        client = get_supabase_client()
-        folder = slugify(project_name)
-        desc_folder = f"{folder}/descriptions"
+def load_photos_from_supabase(project_name: str, retries: int = 3, delay: float = 1.5) -> list:
+    """Load all photos + descriptions for a project from Supabase.
+    Retries up to `retries` times on transient network errors (Errno 35).
+    """
+    from PIL import Image
+    import io
 
-        # List description files
-        files = client.storage.from_(BUCKET).list(desc_folder)
-        if not files:
+    client = get_supabase_client()
+    folder = slugify(project_name)
+    desc_folder = f"{folder}/descriptions"
+
+    for attempt in range(retries):
+        try:
+            # List description files
+            files = client.storage.from_(BUCKET).list(desc_folder)
+            if not files:
+                return []
+
+            photos = []
+            for f in files:
+                if not f["name"].endswith(".json"):
+                    continue
+
+                # Download description JSON
+                desc_path = f"{desc_folder}/{f['name']}"
+                res = client.storage.from_(BUCKET).download(desc_path)
+                meta = json.loads(res.decode("utf-8"))
+
+                # Download image bytes
+                img_path = f"{folder}/{meta['id']}_{meta['filename']}"
+                try:
+                    img_bytes = client.storage.from_(BUCKET).download(img_path)
+                    meta["image_bytes"] = img_bytes
+                    pil_img = Image.open(io.BytesIO(img_bytes))
+                    pil_img.load()
+                    meta["image_pil"] = pil_img
+                except Exception:
+                    meta["image_bytes"] = None
+                    meta["image_pil"] = None
+
+                photos.append(meta)
+
+            return photos
+
+        except Exception as e:
+            err_str = str(e)
+            is_transient = any(x in err_str for x in ["Errno 35", "Errno 11", "temporarily unavailable"])
+            if is_transient and attempt < retries - 1:
+                time.sleep(delay * (attempt + 1))  # 1.5s → 3s → 4.5s
+                continue
+            # Non-retryable error or all retries exhausted — fail silently
             return []
 
-        photos = []
-        for f in files:
-            if not f["name"].endswith(".json"):
-                continue
-
-            # Download description JSON
-            desc_path = f"{desc_folder}/{f['name']}"
-            res = client.storage.from_(BUCKET).download(desc_path)
-            meta = json.loads(res.decode("utf-8"))
-
-            # Download image bytes
-            img_path = f"{folder}/{meta['id']}_{meta['filename']}"
-            try:
-                img_bytes = client.storage.from_(BUCKET).download(img_path)
-                meta["image_bytes"] = img_bytes
-                from PIL import Image
-                import io
-                pil_img = Image.open(io.BytesIO(img_bytes))
-                pil_img.load()
-                meta["image_pil"] = pil_img
-            except Exception:
-                meta["image_bytes"] = None
-                meta["image_pil"] = None
-
-            photos.append(meta)
-
-        return photos
-
-    except Exception as e:
-        st.warning(f"Could not load photos from Supabase: {e}")
-        return []
+    return []
