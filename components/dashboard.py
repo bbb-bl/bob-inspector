@@ -364,8 +364,14 @@ def render_dashboard():
             'border:1px solid rgba(107,114,128,0.3);">UNKNOWN</span>')
         accent_color = STATUS_ACCENT.get(project.get("status", ""), "#6B7280")
         critical_count = project.get("critical_findings", 0)
+        is_active = bool(active and active.get("id") == project["id"])
 
-        with st.container(border=True):
+        status_text = project.get("status", "Unknown").upper()
+        crit_suffix = f"  ·  △ {critical_count} CRITICAL" if critical_count > 0 else ""
+        active_suffix = "  ·  ACTIVE" if is_active else ""
+        expander_label = f"{project['name']}    {status_text}{crit_suffix}{active_suffix}"
+
+        with st.expander(expander_label, expanded=is_active):
             # Colored top accent bar
             st.markdown(
                 f'<div style="height:3px;background:{accent_color};border-radius:2px;'
@@ -414,7 +420,6 @@ def render_dashboard():
                 f'<div style="font-size:0.88rem;font-weight:500;margin-top:2px;">{project.get("total_inspections", 0)}</div>',
                 unsafe_allow_html=True)
 
-            is_active = bool(active and active.get("id") == project["id"])
             btn_label = "✓ Active project" if is_active else "Start inspection →"
             if st.button(
                 btn_label,
@@ -471,7 +476,7 @@ def render_dashboard():
             """, unsafe_allow_html=True)
 
             # Show active inspection details inside the card
-            if st.session_state.get("current_project") and st.session_state.get("current_project", {}).get("id") == project["id"]:
+            if is_active:
                 items = st.session_state.get("checklist_items", [])
                 if items:
                     checked = sum(1 for i in items if i.get("checked"))
