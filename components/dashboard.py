@@ -157,7 +157,7 @@ def render_report_section():
     st.markdown(
         '<div style="margin-bottom:16px;">'
         '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">AI-Powered</div>'
-        '<div style="font-size:1.3rem;font-weight:800;letter-spacing:0.02em;">Inspection Report</div>'
+        '<div style="font-size:1.9rem;font-weight:900;letter-spacing:0.02em;">Inspection Report</div>'
         '</div>',
         unsafe_allow_html=True,
     )

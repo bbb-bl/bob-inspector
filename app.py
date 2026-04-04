@@ -713,11 +713,12 @@ with tab_bob:
             project = st.session_state.get("current_project")
             fname = f"chat_{project['name'].replace(' ', '_')}.txt" if project else "chat_export.txt"
             if st.download_button(
-                "↓ Export",
+                "↓ Export chat",
                 data=chat_txt,
                 file_name=fname,
                 mime="text/plain",
                 help="Download chat as .txt and save to project folder",
+                use_container_width=True,
             ):
                 saved_path = save_chat_to_project_folder()
                 if saved_path:

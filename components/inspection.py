@@ -149,11 +149,12 @@ def render():
         loaded_key = f"loaded_{project_id}"
         if not st.session_state.get(loaded_key):
             project_name = st.session_state.current_project.get("name", project_id)
-            saved = load_photos_from_supabase(project_name)
-            existing_ids = [p["id"] for p in st.session_state.photos]
-            for p in saved:
-                if p["id"] not in existing_ids:
-                    st.session_state.photos.append(p)
+            with st.spinner(f"Loading project data for {project_name}..."):
+                saved = load_photos_from_supabase(project_name)
+                existing_ids = [p["id"] for p in st.session_state.photos]
+                for p in saved:
+                    if p["id"] not in existing_ids:
+                        st.session_state.photos.append(p)
             st.session_state[loaded_key] = True
 
         # Load historical flagged items for this project (once per project)
