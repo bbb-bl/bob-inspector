@@ -33,8 +33,7 @@ def load_sample_inspection():
             # Always load sample checklist — inspection.py loads from CSV first (Tab 1),
             # which would otherwise block the sample data from ever appearing.
             st.session_state.checklist_items = sample.get("checklist_items", [])
-            if not st.session_state.get("photos"):
-                st.session_state.photos = sample.get("photos", [])
+            # Don't load sample photos — only real Supabase photos should appear in gallery
             if not st.session_state.get("voice_notes"):
                 st.session_state.voice_notes = sample.get("voice_notes", [])
         except FileNotFoundError:
