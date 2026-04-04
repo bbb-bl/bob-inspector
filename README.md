@@ -187,6 +187,16 @@ BOB Inspector v1.0 — ESADE PDAI Final Project — April 2026
 
 ---
 
+## Development Approach
+
+BOB Inspector was built by a cross-functional team combining domain expertise in construction safety, AI engineering, and product design. The team independently designed the full product architecture, defined the inspection workflow, sourced and structured the RD 1627/1997 regulation dataset, and made all technical and UX decisions throughout development.
+
+The team used Claude Code (Anthropic) as an AI coding assistant during implementation — primarily for accelerating boilerplate, debugging, and iterating on UI components. All core decisions — the tool-use architecture for BOB, the multi-modal hazard detection pipeline, the regulation grounding strategy to prevent hallucinations, the checklist data model, the Supabase integration, and the PDF generation pipeline — were designed and validated by the team.
+
+The use of AI coding tools reflects the course's emphasis on prototyping as a discipline: leveraging available tools effectively to build a working, well-designed product in a constrained timeframe.
+
+---
+
 ## Team
 
 | Member | Role |
