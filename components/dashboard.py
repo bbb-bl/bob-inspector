@@ -55,6 +55,42 @@ def save_report_to_disk(project: dict, report_text: str) -> str:
     return path
 
 
+def save_flagged_items(project: dict, checklist_items: list):
+    """Saves outstanding items as a JSON snapshot alongside the report for history tracking."""
+    from datetime import datetime
+    project_id = project.get("id", "unknown")
+    reports_dir = os.path.join("data", "projects_data", project_id, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    outstanding = [
+        {"text": i["text"], "severity": i.get("severity", ""), "zone": i.get("zone", "")}
+        for i in checklist_items if not i.get("checked")
+    ]
+    path = os.path.join(reports_dir, f"flagged_{timestamp}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(outstanding, f, indent=2, ensure_ascii=False)
+
+
+def load_historical_flags(project: dict) -> dict:
+    """Returns {item_text: times_flagged} across all previous flagged snapshots."""
+    project_id = project.get("id", "unknown")
+    reports_dir = os.path.join("data", "projects_data", project_id, "reports")
+    if not os.path.exists(reports_dir):
+        return {}
+    counts = {}
+    for fname in sorted(os.listdir(reports_dir)):
+        if fname.startswith("flagged_") and fname.endswith(".json"):
+            try:
+                with open(os.path.join(reports_dir, fname), "r", encoding="utf-8") as f:
+                    items = json.load(f)
+                for item in items:
+                    text = item.get("text", "")
+                    counts[text] = counts.get(text, 0) + 1
+            except Exception:
+                pass
+    return counts
+
+
 def load_saved_reports(project: dict) -> list[tuple[str, str]]:
     """Returns [(filename, content), ...] sorted oldest→newest for a project."""
     project_id = project.get("id", "unknown")
@@ -151,8 +187,10 @@ def render_report_section():
                     report = generate_report(project, checklist_items, photos, voice_notes)
                     st.session_state.generated_report = report
                     saved_path = save_report_to_disk(project, report)
+                    save_flagged_items(project, checklist_items)
                     st.session_state["report_last_saved"] = _dt.now().strftime("%H:%M")
                     st.session_state["report_saved_path"] = saved_path
+                    st.session_state["historical_flags"] = load_historical_flags(project)
                     st.toast(f"Report saved to {saved_path}")
                 except Exception as e:
                     st.error(f"Error generating report: {str(e)}")
@@ -183,7 +221,13 @@ def render_report_section():
         with dl_col1:
             st.download_button(
                 label="⬇️ Download PDF",
-                data=build_pdf(st.session_state.generated_report, project),
+                data=build_pdf(
+                    st.session_state.generated_report,
+                    project,
+                    photos=st.session_state.get("photos", []),
+                    signature=st.session_state.get("inspection_signature"),
+                    signed_at=st.session_state.get("inspection_signed_at"),
+                ),
                 file_name=f"inspection_{project_name}.pdf",
                 mime="application/pdf",
                 type="primary",

@@ -156,6 +156,17 @@ def render():
                     st.session_state.photos.append(p)
             st.session_state[loaded_key] = True
 
+        # Load historical flagged items for this project (once per project)
+        flags_key = f"flags_loaded_{project_id}"
+        if not st.session_state.get(flags_key):
+            try:
+                from components.dashboard import load_historical_flags
+                project_dict = st.session_state.current_project or {}
+                st.session_state["historical_flags"] = load_historical_flags(project_dict)
+            except Exception:
+                st.session_state["historical_flags"] = {}
+            st.session_state[flags_key] = True
+
     # ── HELPER: photos for THIS project only ────────────────────
     def current_project_photos():
         return [p for p in st.session_state.photos if p.get("project_id") == project_id]
@@ -288,32 +299,43 @@ def render():
                     st.session_state["open_zone"] = zone_name
                     st.rerun()
 
+    # ── Checklist search ─────────────────────────────────────
+    search_q = st.text_input(
+        "Search checklist",
+        placeholder="Search items e.g. 'electrical', 'scaffolding'...",
+        key="checklist_search",
+        label_visibility="collapsed",
+    )
+
     # Group items by zone
     zones = {}
     for item in items:
         zone = item.get("zone", "General")
         zones.setdefault(zone, []).append(item)
 
-    # Render each zone as an expander
-    for zone, zone_items in zones.items():
-        zone_checked = sum(1 for i in zone_items if i.get("checked"))
-        has_critical = any(
-            i.get("severity") == "Critical" and not i.get("checked")
-            for i in zone_items
-        )
-        zone_color = "#EF4444" if has_critical else (
-            "#22C55E" if zone_checked == len(zone_items) else "#3B82F6"
-        )
-        st.markdown(
-            f'<div style="height:2px;background:{zone_color};border-radius:1px;'
-            f'margin-bottom:2px;opacity:0.7;"></div>',
-            unsafe_allow_html=True,
-        )
-        is_open = st.session_state.get("open_zone") == zone
-        with st.expander(
-            f"{zone} ({zone_checked}/{len(zone_items)} done)", expanded=is_open
-        ):
-            for item in zone_items:
+    # If searching, show a flat filtered list instead of zone expanders
+    if search_q:
+        q = search_q.lower()
+        matching = [
+            i for i in items
+            if q in i.get("text", "").lower()
+            or q in i.get("zone", "").lower()
+            or q in i.get("detail", "").lower()
+            or q in i.get("category", "").lower()
+        ]
+        if not matching:
+            st.markdown(
+                f'<div style="color:#6B7280;font-size:0.85rem;padding:12px 0;">No items match "{search_q}"</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div style="font-size:0.75rem;color:#6B7280;margin-bottom:8px;">'
+                f'{len(matching)} item(s) matching "{search_q}"</div>',
+                unsafe_allow_html=True,
+            )
+            historical_flags = st.session_state.get("historical_flags", {})
+            for item in matching:
                 sev = item.get("severity", "Rec")
                 if sev == "Critical":
                     badge = '<span style="background:#FF4444;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Critical</span>'
@@ -321,38 +343,124 @@ def render():
                     badge = '<span style="background:#E8940A;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Minor</span>'
                 else:
                     badge = '<span style="background:#2855C8;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Rec</span>'
-
+                times_flagged = historical_flags.get(item.get("text", ""), 0)
+                if times_flagged > 0 and not item.get("checked"):
+                    visits = "visit" if times_flagged == 1 else "visits"
+                    badge += (
+                        f' <span style="background:rgba(245,158,11,0.15);color:#fbbf24;'
+                        f'padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;'
+                        f'border:1px solid rgba(245,158,11,0.3);">Outstanding {times_flagged} {visits}</span>'
+                    )
+                zone_label = f'<span style="color:#6B7280;font-size:0.72rem;"> — {item.get("zone","")}</span>'
                 col1, col2 = st.columns([0.85, 0.15])
-
                 with col1:
                     checked = st.checkbox(
                         item["text"],
                         value=item.get("checked", False),
-                        key=f"chk_{item['id']}",
+                        key=f"srch_chk_{item['id']}",
                     )
                     if checked != item.get("checked", False):
                         item["checked"] = checked
-                        st.session_state["open_zone"] = zone
+                        if checked:
+                            item["checked_at"] = datetime.now().strftime("%H:%M")
+                            item["checked_by"] = (st.session_state.get("current_project") or {}).get("inspector", "")
+                        else:
+                            item.pop("checked_at", None)
+                            item.pop("checked_by", None)
                         st.rerun()
-
+                    if item.get("checked") and item.get("checked_at"):
+                        by = f" · {item['checked_by']}" if item.get("checked_by") else ""
+                        st.markdown(
+                            f'<div style="font-size:0.7rem;color:#4ade80;margin:-4px 0 4px;">✓ Checked at {item["checked_at"]}{by}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown(f'<div style="font-size:0.72rem;color:#6B7280;margin-top:-4px;">{item.get("zone","")}</div>', unsafe_allow_html=True)
                 with col2:
                     st.markdown(badge, unsafe_allow_html=True)
 
-                if item.get("detail"):
-                    st.caption(item['detail'])
+    if not search_q:
+        for zone, zone_items in zones.items():
+            zone_checked = sum(1 for i in zone_items if i.get("checked"))
+            has_critical = any(
+                i.get("severity") == "Critical" and not i.get("checked")
+                for i in zone_items
+            )
+            zone_color = "#EF4444" if has_critical else (
+                "#22C55E" if zone_checked == len(zone_items) else "#3B82F6"
+            )
+            st.markdown(
+                f'<div style="height:2px;background:{zone_color};border-radius:1px;'
+                f'margin-bottom:2px;opacity:0.7;"></div>',
+                unsafe_allow_html=True,
+            )
+            is_open = st.session_state.get("open_zone") == zone
+            with st.expander(
+                f"{zone} ({zone_checked}/{len(zone_items)} done)", expanded=is_open
+            ):
+                historical_flags = st.session_state.get("historical_flags", {})
+                for item in zone_items:
+                    sev = item.get("severity", "Rec")
+                    if sev == "Critical":
+                        badge = '<span style="background:#FF4444;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Critical</span>'
+                    elif sev == "Minor":
+                        badge = '<span style="background:#E8940A;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Minor</span>'
+                    else:
+                        badge = '<span style="background:#2855C8;color:white;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold">Rec</span>'
 
-                if item.get("checked", False):
-                    notes = st.text_input(
-                        "Notes",
-                        value=item.get("notes", ""),
-                        key=f"notes_{item['id']}",
-                        placeholder="Add observation...",
-                    )
-                    if notes != item.get("notes", ""):
-                        item["notes"] = notes
-                        item["severity"] = (
-                            classify_severity(notes) if notes else item.get("severity", "Rec")
+                    times_flagged = historical_flags.get(item.get("text", ""), 0)
+                    if times_flagged > 0 and not item.get("checked"):
+                        visits = "visit" if times_flagged == 1 else "visits"
+                        badge += (
+                            f' <span style="background:rgba(245,158,11,0.15);color:#fbbf24;'
+                            f'padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;'
+                            f'border:1px solid rgba(245,158,11,0.3);">'
+                            f'Outstanding {times_flagged} {visits}</span>'
                         )
+
+                    col1, col2 = st.columns([0.85, 0.15])
+
+                    with col1:
+                        checked = st.checkbox(
+                            item["text"],
+                            value=item.get("checked", False),
+                            key=f"chk_{item['id']}",
+                        )
+                        if checked != item.get("checked", False):
+                            item["checked"] = checked
+                            if checked:
+                                item["checked_at"] = datetime.now().strftime("%H:%M")
+                                inspector = (st.session_state.get("current_project") or {}).get("inspector", "")
+                                item["checked_by"] = inspector
+                            else:
+                                item.pop("checked_at", None)
+                                item.pop("checked_by", None)
+                            st.session_state["open_zone"] = zone
+                            st.rerun()
+                        if item.get("checked") and item.get("checked_at"):
+                            by = f" · {item['checked_by']}" if item.get("checked_by") else ""
+                            st.markdown(
+                                f'<div style="font-size:0.7rem;color:#4ade80;margin:-4px 0 4px;">✓ Checked at {item["checked_at"]}{by}</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                    with col2:
+                        st.markdown(badge, unsafe_allow_html=True)
+
+                    if item.get("detail"):
+                        st.caption(item['detail'])
+
+                    if item.get("checked", False):
+                        notes = st.text_input(
+                            "Notes",
+                            value=item.get("notes", ""),
+                            key=f"notes_{item['id']}",
+                            placeholder="Add observation...",
+                        )
+                        if notes != item.get("notes", ""):
+                            item["notes"] = notes
+                            item["severity"] = (
+                                classify_severity(notes) if notes else item.get("severity", "Rec")
+                            )
 
     # Custom item input
     st.markdown("**Add custom item**")
@@ -477,86 +585,84 @@ def render():
 
             # ── Section 1: Previous photos (thumbnail grid only) ──
             if old_photos:
-                st.markdown("## Previous photos")
-                cols = st.columns(3)
-                for i, photo in enumerate(old_photos):
-                    with cols[i % 3]:
-                        if photo.get("image_pil") is not None:
-                            st.image(photo["image_pil"], caption=photo["filename"], width=200)
-                        else:
-                            st.caption(f"{photo['filename']} (no preview)")
-                        st.caption(
-                            f"{photo.get('location', 'N/A')}  ·  "
-                            f"{photo.get('timestamp', '')[:10]}"
-                        )
-
-            # ── Section 2: Newly uploaded photos (image + AI side by side if analysed) ──
-            if new_photos:
-                if old_photos:
-                    st.divider()
-                st.markdown("## Newly uploaded photos")
-                for photo in new_photos:
-                    with st.container(border=True):
-                        img_col, ai_col = st.columns([0.35, 0.65])
-                        with img_col:
+                with st.expander(f"Previous photos ({len(old_photos)})", expanded=False):
+                    cols = st.columns(3)
+                    for i, photo in enumerate(old_photos):
+                        with cols[i % 3]:
                             if photo.get("image_pil") is not None:
-                                st.image(photo["image_pil"], caption=photo["filename"], width=400)
+                                st.image(photo["image_pil"], caption=photo["filename"], width=200)
                             else:
                                 st.caption(f"{photo['filename']} (no preview)")
                             st.caption(
                                 f"{photo.get('location', 'N/A')}  ·  "
                                 f"{photo.get('timestamp', '')[:10]}"
                             )
-                        with ai_col:
-                            ai_desc = photo.get("ai_description", "")
-                            if ai_desc == "":
-                                st.caption("Not analysed yet — click Analyse to run AI detection")
-                                st.markdown("""
-                                <style>
-                                div.delete-btn > div[data-testid="stButton"] > button {
-                                    background-color: #dc3545 !important;
-                                    color: white !important;
-                                    border-color: #dc3545 !important;
-                                }
-                                div.delete-btn > div[data-testid="stButton"] > button:hover {
-                                    background-color: #a71d2a !important;
-                                }
-                                </style>
-                                """, unsafe_allow_html=True)
-                                confirm_key = f"confirm_del_photo_{photo['id']}"
-                                if not st.session_state.get(confirm_key):
-                                    st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
-                                    if st.button("✕ Delete photo", key=f"del_{photo['id']}"):
-                                        st.session_state[confirm_key] = True
-                                        st.rerun()
-                                    st.markdown('</div>', unsafe_allow_html=True)
+
+            # ── Section 2: Newly uploaded photos (image + AI side by side if analysed) ──
+            if new_photos:
+                with st.expander(f"Newly uploaded photos ({len(new_photos)})", expanded=True):
+                    for photo in new_photos:
+                        with st.container(border=True):
+                            img_col, ai_col = st.columns([0.35, 0.65])
+                            with img_col:
+                                if photo.get("image_pil") is not None:
+                                    st.image(photo["image_pil"], caption=photo["filename"], width=400)
                                 else:
-                                    st.warning("Delete this photo?")
-                                    cy, cn = st.columns(2)
-                                    with cy:
-                                        if st.button("Yes, delete", key=f"del_yes_{photo['id']}", type="primary"):
-                                            st.session_state[deleted_key].add(photo["filename"])
-                                            st.session_state.photos = [
-                                                p for p in st.session_state.photos if p["id"] != photo["id"]
-                                            ]
-                                            st.session_state.newly_uploaded_ids.discard(photo["id"])
-                                            st.session_state.uploader_key += 1
-                                            st.session_state.pop(confirm_key, None)
+                                    st.caption(f"{photo['filename']} (no preview)")
+                                st.caption(
+                                    f"{photo.get('location', 'N/A')}  ·  "
+                                    f"{photo.get('timestamp', '')[:10]}"
+                                )
+                            with ai_col:
+                                ai_desc = photo.get("ai_description", "")
+                                if ai_desc == "":
+                                    st.caption("Not analysed yet — click Analyse to run AI detection")
+                                    st.markdown("""
+                                    <style>
+                                    div.delete-btn > div[data-testid="stButton"] > button {
+                                        background-color: #dc3545 !important;
+                                        color: white !important;
+                                        border-color: #dc3545 !important;
+                                    }
+                                    div.delete-btn > div[data-testid="stButton"] > button:hover {
+                                        background-color: #a71d2a !important;
+                                    }
+                                    </style>
+                                    """, unsafe_allow_html=True)
+                                    confirm_key = f"confirm_del_photo_{photo['id']}"
+                                    if not st.session_state.get(confirm_key):
+                                        st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
+                                        if st.button("✕ Delete photo", key=f"del_{photo['id']}"):
+                                            st.session_state[confirm_key] = True
                                             st.rerun()
-                                    with cn:
-                                        if st.button("Cancel", key=f"del_no_{photo['id']}"):
-                                            st.session_state.pop(confirm_key, None)
-                                            st.rerun()
-                            elif ai_desc == "Analysis unavailable":
-                                st.warning("Analysis failed")
-                            elif photo.get("hazard_flag"):
-                                st.error("## Hazard detected")
-                                if photo.get("hazard_details"):
-                                    st.warning(photo['hazard_details'])
-                                st.write(ai_desc)
-                            else:
-                                st.success("## No hazard detected")
-                                st.write(ai_desc)
+                                        st.markdown('</div>', unsafe_allow_html=True)
+                                    else:
+                                        st.warning("Delete this photo?")
+                                        cy, cn = st.columns(2)
+                                        with cy:
+                                            if st.button("Yes, delete", key=f"del_yes_{photo['id']}", type="primary"):
+                                                st.session_state[deleted_key].add(photo["filename"])
+                                                st.session_state.photos = [
+                                                    p for p in st.session_state.photos if p["id"] != photo["id"]
+                                                ]
+                                                st.session_state.newly_uploaded_ids.discard(photo["id"])
+                                                st.session_state.uploader_key += 1
+                                                st.session_state.pop(confirm_key, None)
+                                                st.rerun()
+                                        with cn:
+                                            if st.button("Cancel", key=f"del_no_{photo['id']}"):
+                                                st.session_state.pop(confirm_key, None)
+                                                st.rerun()
+                                elif ai_desc == "Analysis unavailable":
+                                    st.warning("Analysis failed")
+                                elif photo.get("hazard_flag"):
+                                    st.error("## Hazard detected")
+                                    if photo.get("hazard_details"):
+                                        st.warning(photo['hazard_details'])
+                                    st.write(ai_desc)
+                                else:
+                                    st.success("## No hazard detected")
+                                    st.write(ai_desc)
 
             st.divider()
 
@@ -600,18 +706,18 @@ def render():
             hazard_photos = [p for p in project_photos if p.get("hazard_flag")]
             if hazard_photos:
                 st.divider()
-                st.markdown("### Hazard Summary")
-                st.caption(f"{len(hazard_photos)} hazard(s) found — review before leaving the site:")
-                for p in hazard_photos:
-                    with st.container(border=True):
-                        c1, c2 = st.columns([0.3, 0.7])
-                        with c1:
-                            if p.get("image_pil"):
-                                st.image(p["image_pil"], width=120)
-                        with c2:
-                            st.markdown(f"**{p['filename']}**")
-                            st.caption(f"{p.get('location','N/A')}  ·  {p.get('timestamp','')[:10]}")
-                            st.error(f"△ {p.get('hazard_details', 'Hazard detected')}")
+                with st.expander(f"△ Hazard Summary ({len(hazard_photos)} found)", expanded=True):
+                    st.caption(f"{len(hazard_photos)} hazard(s) found — review before leaving the site:")
+                    for p in hazard_photos:
+                        with st.container(border=True):
+                            c1, c2 = st.columns([0.3, 0.7])
+                            with c1:
+                                if p.get("image_pil"):
+                                    st.image(p["image_pil"], width=120)
+                            with c2:
+                                st.markdown(f"**{p['filename']}**")
+                                st.caption(f"{p.get('location','N/A')}  ·  {p.get('timestamp','')[:10]}")
+                                st.error(f"△ {p.get('hazard_details', 'Hazard detected')}")
 
         else:
             st.markdown("""
@@ -747,6 +853,8 @@ def render():
             summary_color = "#22C55E" if ready else "#F59E0B"
             summary_icon = "✓" if ready else "△"
             hazard_color = "#f87171" if hazard_photos else "#4ade80"
+            inspector_name = (st.session_state.get("current_project") or {}).get("inspector", "—")
+            today_str = datetime.now().strftime("%d %B %Y  ·  %H:%M")
 
             # Build critical items block separately to avoid nested f-string issues
             if crit_left:
@@ -793,13 +901,53 @@ def render():
                     </div>
                 </div>
                 {crit_block}
+                <div style="border-top:1px solid rgba(255,255,255,0.07);margin-top:4px;padding-top:12px;
+                            display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:#6B7280;font-weight:600;">Inspector</div>
+                        <div style="font-size:0.88rem;font-weight:600;color:#e8e8f0;">{inspector_name}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:#6B7280;font-weight:600;">Completed</div>
+                        <div style="font-size:0.88rem;font-weight:600;color:#e8e8f0;">{today_str}</div>
+                    </div>
+                </div>
             </div>
             """, unsafe_allow_html=True)
 
+            # ── Signature block ───────────────────────────────
+            st.markdown(
+                '<div style="margin-top:16px;">'
+                '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.12em;'
+                'color:#6B7280;font-weight:600;margin-bottom:6px;">Digital Signature</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            sig_col, _ = st.columns([2, 1])
+            with sig_col:
+                signature = st.text_input(
+                    "Type your full name to sign this inspection",
+                    value=st.session_state.get("inspection_signature", inspector_name),
+                    placeholder="Full name...",
+                    key="sig_input",
+                    label_visibility="collapsed",
+                )
+            if signature:
+                st.session_state["inspection_signature"] = signature
+                st.session_state["inspection_signed_at"] = today_str
+                st.markdown(
+                    f'<div style="font-size:0.78rem;color:#4ade80;margin-top:4px;">'
+                    f'✓ Signed as <b>{signature}</b> — {today_str}</div>',
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
             col_report, col_reset = st.columns([2, 1])
             with col_report:
                 st.info("→ Go to Dashboard to generate and download your inspection report.")
             with col_reset:
                 if st.button("Start new inspection", use_container_width=True):
                     st.session_state["show_finish_summary"] = False
+                    st.session_state.pop("inspection_signature", None)
+                    st.session_state.pop("inspection_signed_at", None)
                     st.rerun()
