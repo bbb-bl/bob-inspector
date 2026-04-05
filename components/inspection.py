@@ -829,14 +829,6 @@ def render():
     else:
         st.caption("No voice notes recorded yet.")
 
-<<<<<<< HEAD
-# ── END OF INSPECTION ──────────────────────────────────────────────
-    st.divider()
-    st.markdown("### Done with your inspection?")
-    if st.button("📊 Go to Dashboard to generate and download your report", use_container_width=True):
-        st.session_state.active_tab = "Dashboard"
-        st.rerun()
-=======
     # ── FINISH INSPECTION ─────────────────────────────────────────
     if project_selected:
         st.divider()
@@ -964,4 +956,3 @@ def render():
                     st.session_state.pop("inspection_signature", None)
                     st.session_state.pop("inspection_signed_at", None)
                     st.rerun()
->>>>>>> 5f97809bd7b145e90ca57a4b7989a4184fa9b8db

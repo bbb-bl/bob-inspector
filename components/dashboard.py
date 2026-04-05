@@ -331,19 +331,31 @@ def render_dashboard():
     if "show_project_form" not in st.session_state:
         st.session_state.show_project_form = False
 
+    st.markdown(
+        '<div style="margin-bottom:8px;">'
+        '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">New</div>'
+        '<div style="font-size:1.1rem;font-weight:800;letter-spacing:0.02em;">Add Project</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
     if st.session_state.project_created:
-        st.success("Project created successfully! Scroll down to find it in the Projects list.")
+        st.success("Project created successfully!")
         st.session_state.project_created = False
 
-    with st.expander("+ Add New Project — Click to expand", expanded=st.session_state.show_project_form):
+    with st.container(border=True):
         with st.form("new_project_form", clear_on_submit=True):
-            name = st.text_input("Project name *")
-            address = st.text_input("Address *")
-            building_type = st.selectbox("Building type *", ["Commercial", "Residential", "Educational"])
-            inspector = st.text_input("Inspector name *")
-            status = st.selectbox("Status *", ["In progress", "Pending review", "Complete"])
+            col_a, col_b = st.columns(2)
+            col_a, col_b = st.columns(2)
+            with col_a:
+                name = st.text_input("Project name *")
+                address = st.text_input("Address *")
+                inspector = st.text_input("Inspector name *")
+            with col_b:
+                building_type = st.selectbox("Building type *", ["Commercial", "Residential", "Educational"])
+                status = st.selectbox("Status *", ["In progress", "Pending review", "Complete"])
 
-            submitted = st.form_submit_button("Create project")
+            submitted = st.form_submit_button("＋ Create project", type="primary", use_container_width=True)
             if submitted:
                 if name and address and inspector:
                     new_project = {
@@ -360,12 +372,7 @@ def render_dashboard():
                         "notes": ""
                     }
                     st.session_state.projects.append(new_project)
-                    st.session_state.project_created = True
-                    st.rerun()
-                else:
-                    st.error("Please fill in all required fields.")
 
-                    # Save to projects.json so it persists after restart
                     data_path = os.path.join(
                         os.path.dirname(os.path.abspath(__file__)),
                         "..", "data", "projects.json"
@@ -376,15 +383,19 @@ def render_dashboard():
                     except Exception as e:
                         st.warning(f"Project created but could not save to disk: {e}")
 
-                    # Auto-select new project and go to Inspection tab
                     st.session_state.current_project = new_project
                     st.session_state.active_tab = "Inspection"
-                    st.success(f"Project '{name}' created! Redirecting to inspection...")
+                    st.session_state.project_created = True
                     st.rerun()
+                else:
+                    st.error("Please fill in all required fields.")
 
-        if not projects:
-            st.info("No projects loaded. Check that data/projects.json exists.")
-            return
+    st.divider()
+
+    # ── Projects list ────────────────────────────────────────────────────────
+    if not projects:
+        st.info("No projects loaded. Check that data/projects.json exists.")
+        return
 
     for project in projects:
         status_pill = STATUS_PILLS.get(project.get("status", ""),
@@ -486,23 +497,6 @@ def render_dashboard():
 
             if project.get("notes"):
                 st.caption(project['notes'])
-
-            # Project inspection brief
-            insp_date = project.get('last_inspection', 'Not yet inspected')
-            open_f = project.get('open_findings', 0)
-            crit_f = project.get('critical_findings', 0)
-            n_insp = project.get('total_inspections', 0)
-            brief_color = "#DC2626" if crit_f > 0 else "#16A34A"
-            crit_label = f"△ {crit_f} critical unresolved" if crit_f > 0 else "✓ No critical items"
-            st.markdown(f"""
-            <div style="background:#F8FAFC;border-radius:8px;padding:10px 14px;
-                        margin-top:8px;border-left:4px solid {brief_color};font-size:0.82rem;color:#475569">
-                Last inspected: <b>{insp_date}</b> &nbsp;·&nbsp;
-                {open_f} open finding(s) &nbsp;·&nbsp;
-                {n_insp} inspection(s) conducted &nbsp;·&nbsp;
-                <span style="color:{brief_color};font-weight:600">{crit_label}</span>
-            </div>
-            """, unsafe_allow_html=True)
 
             # Show active inspection details inside the card
             if is_active:
