@@ -1,5 +1,5 @@
 # BOB Inspector
-### AI Construction Safety Inspector — ESADE PDAI 2025
+### AI Construction Safety Inspector — ESADE PDAI 2026
 
 > **BOB** (Building Observation Bot) is an AI-powered construction site safety inspection platform built for architects and site managers. It replaces paper-based inspection workflows with a real-time digital system: smart checklists, AI photo analysis, voice notes, and automated formal report generation.
 
@@ -40,25 +40,33 @@ Inspect → AI Analyses → Report Ready
 ## Features
 
 ### Dashboard
-- Project cards with colour-coded status badges and live checklist progress
-- Active inspection panel inside each project card — compliance %, progress bar, critical status
+- Project cards as collapsible expanders — active project expanded by default, others collapsed
+- Colour-coded top accent bar per status (blue / green / amber / red) with status pill badge
+- Active inspection panel inside each card — compliance %, progress bar, critical status
 - Project brief per card — last inspection date, open findings, inspections conducted
 - Report generation with PDF and Markdown download
+- Photos auto-loaded from Supabase when generating report — no manual step required
+- PDF embeds hazard photos with captions and red finding text
 - Report history with timestamps per project
 - Weekly progress comparison between two reports using AI
-- Photo gallery with search, project filter, and hazard-only filter
-- Add and delete projects
+- Photo gallery — auto-loads current project's photos, switches on project change
+- Hazard-only filter and description text search in gallery
+- Add and delete projects (two-step confirmation)
 
 ### Inspection Tab
 - Project selector — auto-sets checklist type based on building type (Commercial / Residential / Educational)
 - Smart checklist sorted by severity (Critical first, checked items move to bottom)
 - 45 checklist items sourced from RD 1627/1997
+- Real-time checklist search — filters across all zones by text, zone, category
+- Timestamp + inspector name recorded when each item is checked off
+- History badges — amber pill showing how many previous visits an item was outstanding
 - Before/After photo view — raw image on left, AI analysis result on right
-- Regenerate button per photo — re-run AI if result looks wrong
 - AI photo analysis via Llama 4 Scout vision model
+- Collapsible photo sections (previous / newly uploaded / hazard summary)
 - Voice notes with Wizard of Oz simulation (10 pre-written realistic transcriptions)
 - Voice notes auto-classified by severity, can be added directly to checklist
 - Custom checklist items
+- Finish inspection flow with digital signature field
 
 ### Ask BOB (Chatbot)
 - Multi-call tool_use architecture — BOB decides which tool to call based on the question
@@ -154,8 +162,8 @@ streamlit run app.py
 4. Inspection tab — sample checklist (5/8 complete, 2 critical outstanding)
 5. Upload photos — click Analyse with AI — before/after view appears
 6. Press Start recording — Stop — voice note appears with severity badge
-7. Dashboard — click Generate report with AI — formal report appears
-8. Click Download PDF — professional report downloads instantly
+7. Dashboard — click Generate report with AI — photos auto-load, formal report appears
+8. Click Download PDF — professional report with embedded hazard photos downloads instantly
 9. Ask BOB tab — "What's still unchecked?" — BOB calls tool, returns live data
 
 ---
@@ -175,7 +183,17 @@ matplotlib
 
 ---
 
-BOB Inspector v1.0 — ESADE PDAI Final Project — April 2025
+BOB Inspector v1.0 — ESADE PDAI Final Project — April 2026
+
+---
+
+## Development Approach
+
+BOB Inspector was built by a cross-functional team combining domain expertise in construction safety, AI engineering, and product design. The team independently designed the full product architecture, defined the inspection workflow, sourced and structured the RD 1627/1997 regulation dataset, and made all technical and UX decisions throughout development.
+
+The team used Claude Code (Anthropic) as an AI coding assistant during implementation — primarily for accelerating boilerplate, debugging, and iterating on UI components. All core decisions — the tool-use architecture for BOB, the multi-modal hazard detection pipeline, the regulation grounding strategy to prevent hallucinations, the checklist data model, the Supabase integration, and the PDF generation pipeline — were designed and validated by the team.
+
+The use of AI coding tools reflects the course's emphasis on prototyping as a discipline: leveraging available tools effectively to build a working, well-designed product in a constrained timeframe.
 
 ---
 

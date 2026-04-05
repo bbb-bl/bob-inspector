@@ -33,8 +33,7 @@ def load_sample_inspection():
             # Always load sample checklist — inspection.py loads from CSV first (Tab 1),
             # which would otherwise block the sample data from ever appearing.
             st.session_state.checklist_items = sample.get("checklist_items", [])
-            if not st.session_state.get("photos"):
-                st.session_state.photos = sample.get("photos", [])
+            # Don't load sample photos — only real Supabase photos should appear in gallery
             if not st.session_state.get("voice_notes"):
                 st.session_state.voice_notes = sample.get("voice_notes", [])
         except FileNotFoundError:
@@ -164,14 +163,22 @@ def render_report_section():
 
     project = st.session_state.get("current_project")
     checklist_items = st.session_state.get("checklist_items", [])
-    photos = st.session_state.get("photos", [])
     voice_notes = st.session_state.get("voice_notes", [])
 
     if not project:
         st.info("→ Click 'Start inspection →' on a project above to select it first.")
         return
 
-    st.caption(f"Generating report for: **{project['name']}**")
+    # Filter photos to current project only
+    proj_id = project.get("id", "")
+    proj_name = project.get("name", "")
+    proj_slug = proj_name.lower().replace(" ", "-").replace("/", "-")
+    photos = [
+        p for p in st.session_state.get("photos", [])
+        if p.get("project_id") in (proj_id, proj_name, proj_slug)
+    ]
+
+    st.caption(f"Generating report for: **{proj_name}**")
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Checklist items", len(checklist_items))
@@ -241,18 +248,12 @@ def render_report_section():
         dl_col1, dl_col2 = st.columns(2)
 
         with dl_col1:
-            proj_id = project.get("id", "")
-            proj_slug = project.get("name", "").lower().replace(" ", "-").replace("/", "-")
-            project_photos = [
-                p for p in st.session_state.get("photos", [])
-                if p.get("project_id") in (proj_id, proj_slug, project.get("name", ""))
-            ]
             st.download_button(
                 label="⬇️ Download PDF",
                 data=build_pdf(
                     st.session_state.generated_report,
                     project,
-                    photos=project_photos,
+                    photos=photos,
                     signature=st.session_state.get("inspection_signature"),
                     signed_at=st.session_state.get("inspection_signed_at"),
                 ),
@@ -542,95 +543,64 @@ def render_dashboard():
                     st.caption("No checklist started yet")
     render_report_section()
 
-    # ── Photo Gallery + Search (Day 4) ───────────────────────────────────────
+    # ── Photo Gallery (current project only) ────────────────────────────────
     st.divider()
 
-    st.markdown(
-        '<div style="margin-bottom:12px;">'
-        '<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">Documentation</div>'
-        '<div style="font-size:1.3rem;font-weight:800;letter-spacing:0.02em;">Photo Gallery</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Load buttons
-    def _load_photos_for(proj):
-        from utils.storage import load_photos_from_supabase
-        from PIL import Image
-        import io as _io
-        try:
-            saved = load_photos_from_supabase(proj["name"])
-            existing_ids = [p["id"] for p in st.session_state.photos]
-            for p in saved:
-                if p["id"] not in existing_ids:
-                    if p.get("image_bytes") and "image_pil" not in p:
-                        try:
-                            pil_img = Image.open(_io.BytesIO(p["image_bytes"]))
-                            pil_img.load()
-                            p["image_pil"] = pil_img
-                        except Exception:
-                            p["image_pil"] = None
-                    st.session_state.photos.append(p)
-        except Exception as e:
-            st.warning(f"Could not load photos for {proj['name']}: {e}")
-
     active_project = st.session_state.get("current_project")
-    btn_col1, btn_col2 = st.columns(2)
-    with btn_col1:
-        current_label = f"Load photos — {active_project['name']}" if active_project else "Load current project photos"
-        if active_project and st.button(current_label, use_container_width=True):
-            with st.spinner(f"Loading photos for {active_project['name']}..."):
-                _load_photos_for(active_project)
-                st.session_state[f"gallery_loaded_{active_project['id']}"] = True
-            st.rerun()
-    with btn_col2:
-        if st.button("Load photos — all projects", use_container_width=True):
-            with st.spinner("Loading photos from Supabase..."):
-                for proj in st.session_state.get("projects", []):
-                    _load_photos_for(proj)
-            st.session_state["gallery_loaded_all"] = True
-            st.rerun()
 
-    if st.session_state.photos:
-        # Build lookup: project_id -> project name
-        id_to_name = {p["id"]: p["name"] for p in st.session_state.get("projects", [])}
+    if active_project:
+        proj_id = active_project.get("id", "")
+        proj_name = active_project.get("name", "")
+        proj_slug = proj_name.lower().replace(" ", "-").replace("/", "-")
 
-        f1, f2, f3 = st.columns(3)
+        # Auto-load photos for the current project if not yet loaded
+        if not st.session_state.get(f"gallery_loaded_{proj_id}"):
+            from utils.storage import load_photos_from_supabase
+            from PIL import Image as _PILImage
+            import io as _io
+            with st.spinner(f"Loading photos for {proj_name}..."):
+                try:
+                    saved = load_photos_from_supabase(proj_name)
+                    existing_ids = [p["id"] for p in st.session_state.photos]
+                    for p in saved:
+                        if p["id"] not in existing_ids:
+                            if p.get("image_bytes") and "image_pil" not in p:
+                                try:
+                                    pil_img = _PILImage.open(_io.BytesIO(p["image_bytes"]))
+                                    pil_img.load()
+                                    p["image_pil"] = pil_img
+                                except Exception:
+                                    p["image_pil"] = None
+                            st.session_state.photos.append(p)
+                except Exception:
+                    pass
+            st.session_state[f"gallery_loaded_{proj_id}"] = True
+
+        # Filter to current project only
+        def _matches_current(photo):
+            pid = photo.get("project_id", "")
+            return pid in (proj_id, proj_name, proj_slug)
+
+        project_photos = [p for p in st.session_state.photos if _matches_current(p)]
+
+        # Filters
+        f1, f2 = st.columns([1, 2])
         with f1:
-            all_project_names = ["All"] + [p["name"] for p in st.session_state.get("projects", [])]
-            active_project = st.session_state.get("current_project")
-            active_name = active_project.get("name") if active_project else None
-            default_idx = all_project_names.index(active_name) if active_name in all_project_names else 0
-            selected_project = st.selectbox("Project", all_project_names, index=default_idx)
-        with f2:
             hazards_only = st.checkbox("Hazards only")
-        with f3:
+        with f2:
             search_query = st.text_input("Search descriptions")
 
-        filtered = list(st.session_state.photos)
-        if selected_project != "All":
-            def matches_project(photo):
-                pid = photo.get("project_id", "")
-                if id_to_name.get(pid) == selected_project:
-                    return True
-                if pid == selected_project:
-                    return True
-                slug = selected_project.lower().replace(" ", "-").replace("/", "-")
-                if pid == slug:
-                    return True
-                return False
-            filtered = [p for p in filtered if matches_project(p)]
+        filtered = project_photos
         if hazards_only:
             filtered = [p for p in filtered if p.get("hazard_flag")]
         if search_query:
-            q = search_query.lower()
-            filtered = [p for p in filtered if q in p.get("ai_description", "").lower()]
+            filtered = [p for p in filtered if search_query.lower() in p.get("ai_description", "").lower()]
 
-        # Update header count after filtering
         st.markdown(
             f'<div style="margin-bottom:12px;">'
             f'<div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.16em;color:#2855C8;font-weight:700;margin-bottom:4px;">Documentation</div>'
-            f'<div style="font-size:1.3rem;font-weight:800;letter-spacing:0.02em;">Photo Gallery <span style="font-size:0.9rem;color:#6B7280;font-weight:400;">({len(filtered)} photos)</span></div>'
+            f'<div style="font-size:1.3rem;font-weight:800;letter-spacing:0.02em;">Photo Gallery '
+            f'<span style="font-size:0.9rem;color:#6B7280;font-weight:400;">({len(filtered)} photos · {proj_name})</span></div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -640,8 +610,8 @@ def render_dashboard():
             <div style="border:2px dashed rgba(255,255,255,0.1);border-radius:12px;
                         padding:40px;text-align:center;color:#4B5563;margin:16px 0;">
                 <div style="font-size:1.4rem;margin-bottom:8px;opacity:0.4;">▣</div>
-                <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;color:#6B7280;">No photos match the current filters</div>
-                <div style="font-size:0.8rem;color:#4B5563;">Try adjusting your filter criteria</div>
+                <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;color:#6B7280;">No photos yet for this project</div>
+                <div style="font-size:0.8rem;color:#4B5563;">Upload site photos from the Inspection tab</div>
             </div>""", unsafe_allow_html=True)
         else:
             grid = st.columns(3)
@@ -657,6 +627,6 @@ def render_dashboard():
                         if photo.get("hazard_flag"):
                             st.error(f"△ {photo.get('hazard_details', '')}")
                         st.markdown(f"**Description:** {photo.get('ai_description', '_Not yet analysed_')}")
-                        _pname = id_to_name.get(photo.get("project_id", ""), photo.get("project_id", "N/A"))
-                        st.caption(f"Project: {_pname}")
                         st.caption(f"{photo.get('location', 'N/A')}  ·  {photo.get('timestamp', '')[:16]}")
+    else:
+        st.info("→ Select a project to view its photos.")
